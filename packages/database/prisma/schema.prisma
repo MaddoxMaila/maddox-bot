@@ -312,3 +312,23 @@ model Notification {
   @@index([userId, readAt])
   @@map("notifications")
 }
+
+// Added in increment 7 (not part of the original 17-entity schema): the durability half of the
+// event pipeline's two-layer dedupe (BullMQ jobId is the other). No FK constraints to
+// organization/repository on purpose — a webhook can legitimately arrive for an unmapped repo
+// (isRelevant: false, relevanceReason: "untracked_repo"), and we still want to record it.
+model ReceivedEvent {
+  id              String   @id @default(uuid())
+  source          String
+  sourceEventId   String   @map("source_event_id")
+  eventType       String   @map("event_type")
+  organizationId  String?  @map("organization_id")
+  repositoryId    String?  @map("repository_id")
+  isRelevant      Boolean  @map("is_relevant")
+  relevanceReason String   @map("relevance_reason")
+  payload         Json
+  receivedAt      DateTime @default(now()) @map("received_at")
+
+  @@unique([source, sourceEventId])
+  @@map("received_events")
+}

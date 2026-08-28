@@ -25,14 +25,24 @@ layer validates with `isTaskState` on the way out of the database instead, and t
 finds a value that isn't a recognized `TaskState` (that would mean something wrote to the column
 outside this repository).
 
+Increment 7 added one table beyond the original 17: `received_events`, the durability half of the
+event pipeline's two-layer dedupe (BullMQ's `jobId` is the other). It has no FK constraints to
+`organizations`/`repositories` on purpose — a webhook can legitimately arrive for a repo nothing
+maps to yet, and it should still be recorded (`isRelevant: false`, a specific reason) rather than
+fail.
+
 ## What's implemented vs. deferred
 
-`Database` currently wires up `organizations`, `repositories`, and `agentTasks` — enough to prove
-the pattern (schema, migrations, Prisma isolation, real integration tests) end to end. The
-remaining entities' repository classes are added in the increment that actually needs them, e.g.
-`JiraIssueRepository` (increment 6), `PullRequestRepository` / `WorkspaceRepository` (increment
-13), `ToolCallRepository` / `ApprovalRepository` (increments 11–12). Their tables already exist
-from this increment's migration so adding those classes later needs no further schema change.
+`Database` wires up `organizations`, `repositories`, `agentTasks`, `pullRequests` (read-only), and
+`receivedEvents`. `PullRequestRepository` was pulled forward from increment 13 because increment
+7's GitHub event relevance check ("is this PR one the platform created?") needs it now; only
+`findByRepositoryAndProviderNumber` exists — `create` and status updates are still increment 13's,
+since real PR creation is the only thing that will ever populate this table until then.
+
+The remaining entities' repository classes are added in the increment that actually needs them,
+e.g. `JiraIssueRepository` (increment 13), `WorkspaceRepository` (increment 8), `ToolCallRepository`
+/ `ApprovalRepository` (increments 11–12). Their tables already exist from increment 3's migration
+so adding those classes later needs no further schema change.
 
 ## Local development
 

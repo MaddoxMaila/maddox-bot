@@ -62,4 +62,9 @@ export class RepositoryRepository {
   async list(): Promise<RepositoryRecord[]> {
     return this.prisma.repository.findMany({ orderBy: { createdAt: "asc" } });
   }
+
+  /** Maps a Jira project key (e.g. the "PROJ" in "PROJ-481") to the repository configured for it. */
+  async findByJiraProjectKey(projectKey: string): Promise<RepositoryRecord | null> {
+    return this.prisma.repository.findFirst({ where: { jiraProjectKeys: { has: projectKey } } });
+  }
 }

@@ -76,4 +76,28 @@ describe("RepositoryRepository", () => {
 
     await expect(repository.create(input)).rejects.toThrow();
   });
+
+  it("finds a repository by Jira project key", async () => {
+    const suffix = createId();
+    const projectKey = `PROJ${suffix.slice(0, 8).toUpperCase()}`;
+    const created = await repository.create({
+      organizationId,
+      owner: `owner-${suffix}`,
+      name: `repo-${suffix}`,
+      defaultBranch: "main",
+      cloneUrl: `https://github.com/owner-${suffix}/repo-${suffix}.git`,
+      jiraProjectKeys: [projectKey],
+      agentTriggerConfig: {},
+      branchNamingTemplate: "feature/<jira-key>-<kebab-summary>",
+    });
+    createdRepositoryIds.push(created.id);
+
+    const found = await repository.findByJiraProjectKey(projectKey);
+    expect(found?.id).toBe(created.id);
+  });
+
+  it("returns null for a Jira project key no repository is configured with", async () => {
+    const found = await repository.findByJiraProjectKey(`UNMAPPED-${createId()}`);
+    expect(found).toBeNull();
+  });
 });
