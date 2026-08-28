@@ -17,6 +17,7 @@
     "sourceMap": true,
     "composite": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "types": ["node"]
   }
 }
