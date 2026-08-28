@@ -12,6 +12,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --coverage"
   },
+  "dependencies": {
+    "@maddox-bot/git": "workspace:*",
+    "@maddox-bot/github": "workspace:*",
+    "@maddox-bot/jira": "workspace:*",
+    "@maddox-bot/permissions": "workspace:*",
+    "@maddox-bot/sandbox": "workspace:*",
+    "minimatch": "^10.0.1",
+    "zod": "^4.0.0"
+  },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.1.8",
     "typescript": "^5.7.2",

@@ -113,6 +113,28 @@ importers:
         version: 2.1.9(@types/node@22.20.1)
 
   packages/agent-tools:
+    dependencies:
+      '@maddox-bot/git':
+        specifier: workspace:*
+        version: link:../git
+      '@maddox-bot/github':
+        specifier: workspace:*
+        version: link:../github
+      '@maddox-bot/jira':
+        specifier: workspace:*
+        version: link:../jira
+      '@maddox-bot/permissions':
+        specifier: workspace:*
+        version: link:../permissions
+      '@maddox-bot/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
+      minimatch:
+        specifier: ^10.0.1
+        version: 10.2.6
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^2.1.8
