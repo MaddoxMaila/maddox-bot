@@ -12,6 +12,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --coverage"
   },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
+    "zod": "^4.0.0"
+  },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.1.8",
     "typescript": "^5.7.2",
