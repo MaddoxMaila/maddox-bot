@@ -106,4 +106,12 @@ export class AgentTaskRepository {
     });
     return toRecord(row);
   }
+
+  async updatePlan(id: string, plan: Record<string, unknown>): Promise<AgentTaskRecord> {
+    const row = await this.prisma.agentTask.update({
+      where: { id },
+      data: { plan: plan as Prisma.InputJsonValue },
+    });
+    return toRecord(row);
+  }
 }

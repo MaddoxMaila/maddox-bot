@@ -6,6 +6,8 @@ import { OrganizationRepository } from "./repositories/organizationRepository.js
 import { PullRequestRepository } from "./repositories/pullRequestRepository.js";
 import { ReceivedEventRepository } from "./repositories/receivedEventRepository.js";
 import { RepositoryRepository } from "./repositories/repositoryRepository.js";
+import { TaskEventRepository } from "./repositories/taskEventRepository.js";
+import { ToolCallRepository } from "./repositories/toolCallRepository.js";
 import { testDatabaseUrl } from "./testDatabaseUrl.js";
 
 describe("Database", () => {
@@ -15,17 +17,26 @@ describe("Database", () => {
     await db.disconnect();
   });
 
-  it("wires up all five repositories", () => {
+  it("wires up all seven repositories", () => {
     expect(db.organizations).toBeInstanceOf(OrganizationRepository);
     expect(db.repositories).toBeInstanceOf(RepositoryRepository);
     expect(db.agentTasks).toBeInstanceOf(AgentTaskRepository);
     expect(db.pullRequests).toBeInstanceOf(PullRequestRepository);
     expect(db.receivedEvents).toBeInstanceOf(ReceivedEventRepository);
+    expect(db.taskEvents).toBeInstanceOf(TaskEventRepository);
+    expect(db.toolCalls).toBeInstanceOf(ToolCallRepository);
   });
 
   it("can be constructed with the default client", async () => {
     const defaultDb = new Database();
     expect(defaultDb.organizations).toBeInstanceOf(OrganizationRepository);
     await defaultDb.disconnect();
+  });
+
+  it("forUrl builds a fully-wired Database for an explicit connection string", async () => {
+    const urlDb = Database.forUrl(testDatabaseUrl());
+    expect(urlDb.agentTasks).toBeInstanceOf(AgentTaskRepository);
+    await urlDb.organizations.list();
+    await urlDb.disconnect();
   });
 });

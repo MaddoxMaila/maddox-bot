@@ -5,6 +5,8 @@ import { OrganizationRepository } from "./repositories/organizationRepository.js
 import { PullRequestRepository } from "./repositories/pullRequestRepository.js";
 import { ReceivedEventRepository } from "./repositories/receivedEventRepository.js";
 import { RepositoryRepository } from "./repositories/repositoryRepository.js";
+import { TaskEventRepository } from "./repositories/taskEventRepository.js";
+import { ToolCallRepository } from "./repositories/toolCallRepository.js";
 
 /**
  * The only object other packages construct. Wraps a single PrismaClient and hands out
@@ -16,6 +18,8 @@ export class Database {
   readonly agentTasks: AgentTaskRepository;
   readonly pullRequests: PullRequestRepository;
   readonly receivedEvents: ReceivedEventRepository;
+  readonly taskEvents: TaskEventRepository;
+  readonly toolCalls: ToolCallRepository;
 
   constructor(private readonly prisma: PrismaClient = createPrismaClient()) {
     this.organizations = new OrganizationRepository(prisma);
@@ -23,6 +27,17 @@ export class Database {
     this.agentTasks = new AgentTaskRepository(prisma);
     this.pullRequests = new PullRequestRepository(prisma);
     this.receivedEvents = new ReceivedEventRepository(prisma);
+    this.taskEvents = new TaskEventRepository(prisma);
+    this.toolCalls = new ToolCallRepository(prisma);
+  }
+
+  /**
+   * For a caller outside this package that needs a specific connection string (e.g. another
+   * package's own integration tests pointing at @maddox-bot/database's `testDatabaseUrl()`)
+   * without importing @prisma/client itself — that import stays exclusive to this package.
+   */
+  static forUrl(databaseUrl: string): Database {
+    return new Database(createPrismaClient(databaseUrl));
   }
 
   async disconnect(): Promise<void> {

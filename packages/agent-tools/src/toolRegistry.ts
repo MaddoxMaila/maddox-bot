@@ -52,6 +52,7 @@ export class ToolRegistry {
     }
 
     const decision = this.permissionGate.classify({ toolName: name, input: parsed.data });
+    const permission = { tier: decision.tier, reason: decision.reason };
     if (decision.tier === "human_only") {
       return finish({
         ok: false,
@@ -60,6 +61,7 @@ export class ToolRegistry {
           message: `"${name}" requires direct human action (${decision.reason})`,
         },
         durationMs: 0,
+        permission,
       });
     }
     if (decision.tier === "approval_required") {
@@ -74,13 +76,14 @@ export class ToolRegistry {
             message: `"${name}" was denied approval (${decision.reason})`,
           },
           durationMs: 0,
+          permission,
         });
       }
     }
 
     try {
       const outcome = await tool.execute(parsed.data, ctx);
-      return finish({ ...outcome, durationMs: 0 });
+      return finish({ ...outcome, durationMs: 0, permission });
     } catch (error) {
       return finish({
         ok: false,
@@ -89,6 +92,7 @@ export class ToolRegistry {
           message: error instanceof Error ? error.message : String(error),
         },
         durationMs: 0,
+        permission,
       });
     }
   }

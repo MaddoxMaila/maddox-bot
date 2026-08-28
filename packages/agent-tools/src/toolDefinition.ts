@@ -1,3 +1,4 @@
+import type { PermissionTier } from "@maddox-bot/permissions";
 import type { ZodType } from "zod";
 
 export interface ToolExecutionContext {
@@ -18,6 +19,11 @@ export interface ToolResult<T = unknown> extends ToolExecutionOutcome<T> {
    * duplicated per tool — so it's directly comparable across every tool regardless of which path
    * (denied, errored, succeeded) produced the result. */
   durationMs: number;
+  /** Absent when the call never reached classification (unknown_tool, invalid_input) — present for
+   * every other outcome. The one source of truth for what actually gated this call, so a caller
+   * persisting an audit row (agent-core) never has to re-classify with its own PermissionGate
+   * instance and risk disagreeing with the decision that was actually enforced. */
+  permission?: { tier: PermissionTier; reason: string };
 }
 
 export interface ToolDefinition<TInput = unknown, TOutput = unknown> {

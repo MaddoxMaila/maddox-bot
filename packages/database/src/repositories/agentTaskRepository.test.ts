@@ -98,6 +98,24 @@ describe("AgentTaskRepository", () => {
     await prisma.agentTask.update({ where: { id: created.id }, data: { state: "CREATED" } });
   });
 
+  it("updatePlan persists the plan without disturbing state", async () => {
+    const created = await repository.create({
+      organizationId,
+      repositoryId,
+      trigger: {},
+      bounds: {},
+    });
+    createdTaskIds.push(created.id);
+
+    const updated = await repository.updatePlan(created.id, {
+      summary: "Add a health check endpoint",
+      filesToModify: [],
+    });
+
+    expect(updated.plan).toEqual({ summary: "Add a health check endpoint", filesToModify: [] });
+    expect(updated.state).toBe("CREATED");
+  });
+
   it("listByRepository returns tasks for that repository, newest first", async () => {
     const older = await repository.create({
       organizationId,

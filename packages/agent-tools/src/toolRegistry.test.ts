@@ -30,6 +30,7 @@ describe("ToolRegistry", () => {
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("unknown_tool");
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    expect(result.permission).toBeUndefined();
   });
 
   it("returns invalid_input when the input fails the tool's schema", async () => {
@@ -38,9 +39,10 @@ describe("ToolRegistry", () => {
     const result = await registry.execute("git.status", { value: 123 }, fakeContext());
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("invalid_input");
+    expect(result.permission).toBeUndefined();
   });
 
-  it("executes a safe tool without requesting approval", async () => {
+  it("executes a safe tool without requesting approval, and reports the tier it was classified at", async () => {
     const registry = new ToolRegistry();
     registry.register(echoTool);
     const requestApproval = vi.fn().mockResolvedValue("approved");
@@ -53,6 +55,7 @@ describe("ToolRegistry", () => {
 
     expect(result).toMatchObject({ ok: true, output: "hello" });
     expect(requestApproval).not.toHaveBeenCalled();
+    expect(result.permission?.tier).toBe("safe");
   });
 
   it("prevents duplicate registration of the same tool name", () => {
@@ -134,6 +137,7 @@ describe("ToolRegistry", () => {
     expect(execute).not.toHaveBeenCalled();
     expect(requestApproval).not.toHaveBeenCalled();
     expect(result).toMatchObject({ ok: false, error: { code: "human_only" } });
+    expect(result.permission?.tier).toBe("human_only");
   });
 
   it("catches a thrown error from a tool's execute() and reports it, not the process", async () => {

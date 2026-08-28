@@ -13,4 +13,10 @@ export type {
   CreateRepositoryInput,
   RepositoryRecord,
 } from "./repositories/repositoryRepository.js";
+export type { CreateTaskEventInput, TaskEventRecord } from "./repositories/taskEventRepository.js";
+export type {
+  CreateCompletedToolCallInput,
+  ToolCallRecord,
+  ToolCallResultInput,
+} from "./repositories/toolCallRepository.js";
 export { testDatabaseUrl } from "./testDatabaseUrl.js";
