@@ -7,13 +7,21 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "prisma generate && tsc -p tsconfig.json",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --coverage"
+    "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
+    "test": "prisma generate && vitest run --coverage",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@maddox-bot/shared": "workspace:*",
+    "@prisma/client": "^6.1.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.1.8",
+    "prisma": "^6.1.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

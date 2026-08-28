@@ -1,0 +1,314 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Task state is stored as free text, not a native Postgres enum: the vocabulary is owned by
+// @maddox-bot/shared's TaskState union (one canonical source), and Phase 2+ is expected to add
+// states (e.g. CHANGES_REQUESTED). A Postgres enum would need a schema migration for every such
+// addition; the application layer validates via `isTaskState` instead. See ADR-0001.
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users         User[]
+  repositories  Repository[]
+  integrations  Integration[]
+  agentSessions AgentSession[]
+  agentTasks    AgentTask[]
+  auditLogs     AuditLog[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  email          String   @unique
+  displayName    String   @map("display_name")
+  role           String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization     Organization   @relation(fields: [organizationId], references: [id])
+  agentSessions    AgentSession[]
+  decidedApprovals Approval[]
+  notifications    Notification[]
+
+  @@map("users")
+}
+
+model Repository {
+  id                   String   @id @default(uuid())
+  organizationId       String   @map("organization_id")
+  provider             String   @default("github")
+  owner                String
+  name                 String
+  defaultBranch        String   @map("default_branch")
+  cloneUrl             String   @map("clone_url")
+  jiraProjectKeys      String[] @map("jira_project_keys")
+  agentTriggerConfig   Json     @map("agent_trigger_config")
+  branchNamingTemplate String   @map("branch_naming_template")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  agentTasks   AgentTask[]
+  pullRequests PullRequest[]
+  jiraIssues   JiraIssue[]
+
+  @@unique([provider, owner, name])
+  @@map("repositories")
+}
+
+model Integration {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  provider       String
+  config         Json
+  status         String   @default("active")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, provider])
+  @@map("integrations")
+}
+
+model AgentSession {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  userId         String   @map("user_id")
+  title          String
+  status         String   @default("active")
+  lastActiveAt   DateTime @default(now()) @map("last_active_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  user          User           @relation(fields: [userId], references: [id])
+  agentTasks    AgentTask[]
+  agentMessages AgentMessage[]
+
+  @@map("agent_sessions")
+}
+
+// pull_requests.task_id and workspaces.task_id are the FKs (each unique, i.e. 1:1); AgentTask
+// reaches them via the reverse relation instead of also carrying its own pull_request_id /
+// workspace_id column, which would otherwise be two FKs describing the same edge.
+model AgentTask {
+  id             String    @id @default(uuid())
+  sessionId      String?   @map("session_id")
+  organizationId String    @map("organization_id")
+  repositoryId   String    @map("repository_id")
+  jiraIssueId    String?   @map("jira_issue_id")
+  type           String    @default("jira_implementation")
+  state          String    @default("CREATED")
+  previousState  String?   @map("previous_state")
+  plan           Json?
+  trigger        Json
+  bounds         Json
+  retryCounts    Json      @default("{}") @map("retry_counts")
+  error          Json?
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  session      AgentSession? @relation(fields: [sessionId], references: [id])
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  repository   Repository    @relation(fields: [repositoryId], references: [id])
+  jiraIssue    JiraIssue?    @relation(fields: [jiraIssueId], references: [id])
+
+  workspace     Workspace?
+  pullRequest   PullRequest?
+  taskEvents    TaskEvent[]
+  agentMessages AgentMessage[]
+  toolCalls     ToolCall[]
+  approvals     Approval[]
+  artifacts     Artifact[]
+
+  @@index([repositoryId, state])
+  @@map("agent_tasks")
+}
+
+model TaskEvent {
+  id        String   @id @default(uuid())
+  taskId    String   @map("task_id")
+  type      String
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task AgentTask @relation(fields: [taskId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@map("task_events")
+}
+
+model AgentMessage {
+  id        String   @id @default(uuid())
+  sessionId String   @map("session_id")
+  taskId    String?  @map("task_id")
+  role      String
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session AgentSession @relation(fields: [sessionId], references: [id])
+  task    AgentTask?   @relation(fields: [taskId], references: [id])
+
+  @@index([sessionId, createdAt])
+  @@map("agent_messages")
+}
+
+// approvalId is unique: one approval authorizes at most one tool call. A plan_approval isn't
+// tied to any tool call at all, so Approval.toolCall is reached only via this reverse relation
+// (never a physical column on approvals) and is simply null for that kind.
+model ToolCall {
+  id                 String   @id @default(uuid())
+  taskId             String   @map("task_id")
+  role               String
+  toolName           String   @map("tool_name")
+  input              Json
+  permissionDecision String   @map("permission_decision")
+  approvalId         String?  @unique @map("approval_id")
+  startedAt          DateTime @default(now()) @map("started_at")
+
+  task     AgentTask   @relation(fields: [taskId], references: [id])
+  approval Approval?   @relation(fields: [approvalId], references: [id])
+  result   ToolResult?
+
+  @@index([taskId, startedAt])
+  @@map("tool_calls")
+}
+
+model ToolResult {
+  id          String   @id @default(uuid())
+  toolCallId  String   @unique @map("tool_call_id")
+  ok          Boolean
+  output      Json?
+  error       Json?
+  durationMs  Int      @map("duration_ms")
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  toolCall ToolCall @relation(fields: [toolCallId], references: [id])
+
+  @@map("tool_results")
+}
+
+model Workspace {
+  id                 String    @id @default(uuid())
+  taskId             String    @unique @map("task_id")
+  sandboxContainerId String?   @map("sandbox_container_id")
+  status             String    @default("creating")
+  branchName         String?   @map("branch_name")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  destroyedAt        DateTime? @map("destroyed_at")
+
+  task AgentTask @relation(fields: [taskId], references: [id])
+
+  @@map("workspaces")
+}
+
+model Approval {
+  id          String    @id @default(uuid())
+  taskId      String    @map("task_id")
+  kind        String
+  summary     String
+  status      String    @default("pending")
+  decidedById String?   @map("decided_by")
+  decidedAt   DateTime? @map("decided_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  task      AgentTask @relation(fields: [taskId], references: [id])
+  decidedBy User?     @relation(fields: [decidedById], references: [id])
+  toolCall  ToolCall?
+
+  @@index([taskId, status])
+  @@map("approvals")
+}
+
+model PullRequest {
+  id               String   @id @default(uuid())
+  taskId           String   @unique @map("task_id")
+  repositoryId     String   @map("repository_id")
+  providerPrNumber Int      @map("provider_pr_number")
+  url              String
+  title            String
+  body             String
+  headBranch       String   @map("head_branch")
+  baseBranch       String   @map("base_branch")
+  status           String   @default("open")
+  ciStatus         String   @default("unknown") @map("ci_status")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  task       AgentTask  @relation(fields: [taskId], references: [id])
+  repository Repository @relation(fields: [repositoryId], references: [id])
+
+  @@unique([repositoryId, providerPrNumber])
+  @@map("pull_requests")
+}
+
+model JiraIssue {
+  id                 String   @id @default(uuid())
+  repositoryId       String?  @map("repository_id")
+  issueKey           String   @unique @map("issue_key")
+  summary            String
+  description        String?
+  acceptanceCriteria Json?    @map("acceptance_criteria")
+  status             String
+  assignee           String?
+  labels             String[]
+  raw                Json
+  lastSyncedAt       DateTime @default(now()) @map("last_synced_at")
+
+  repository Repository? @relation(fields: [repositoryId], references: [id])
+  agentTasks AgentTask[]
+
+  @@map("jira_issues")
+}
+
+model Artifact {
+  id         String   @id @default(uuid())
+  taskId     String   @map("task_id")
+  type       String
+  storageRef String   @map("storage_ref")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  task AgentTask @relation(fields: [taskId], references: [id])
+
+  @@map("artifacts")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  actor          Json
+  action         String
+  resource       Json
+  outcome        String
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  taskId    String?   @map("task_id")
+  type      String
+  payload   Json
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
