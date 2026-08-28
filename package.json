@@ -1,0 +1,29 @@
+{
+  "name": "maddox-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Software Engineering Agent Platform — event-driven Jira/GitHub agent with a VS Code control interface",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "eslint . && turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "10.8.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "8.65.0",
+    "vitest": "^2.1.8"
+  }
+}

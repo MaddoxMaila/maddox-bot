@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: maddox
+      POSTGRES_PASSWORD: maddox
+      POSTGRES_DB: maddox_bot
+    ports:
+      # Host 5433 -> avoid colliding with this machine's existing buddy-postgres on 5432.
+      - "5433:5432"
+    volumes:
+      - maddox-bot-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maddox"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      # Host 6380 -> avoid colliding with this machine's existing lightyear-redis on 6379.
+      - "6380:6379"
+    volumes:
+      - maddox-bot-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  maddox-bot-postgres:
+  maddox-bot-redis:

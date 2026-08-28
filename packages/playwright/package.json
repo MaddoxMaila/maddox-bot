@@ -1,0 +1,6 @@
+{
+  "name": "@maddox-bot/playwright",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reserved for Phase 2 browser-testing tools (spec section 11) — not built in Phase 1."
+}
