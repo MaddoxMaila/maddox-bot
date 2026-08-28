@@ -12,7 +12,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --coverage"
   },
+  "dependencies": {
+    "bullmq": "^5.34.0",
+    "ioredis": "^5.4.1"
+  },
   "devDependencies": {
+    "@maddox-bot/shared": "workspace:*",
     "@vitest/coverage-v8": "^2.1.8",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
