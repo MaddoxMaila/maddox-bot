@@ -30,6 +30,12 @@ project uses a Node-20-compatible pnpm regardless of what's installed globally, 
 project's `docker-compose.yml` on host ports 5433 (Postgres) and 6380 (Redis) to avoid colliding with
 this machine's existing containers from unrelated work.
 
+The deployment target — now and for the foreseeable roadmap, not just Phase 1 — is a **single
+conventional VM running `docker-compose`**, not Kubernetes or Terraform-managed cloud infrastructure.
+Spec §42's load-balancer/horizontal-scaling architecture is accordingly out of scope; there is no
+`infrastructure/kubernetes/` or `infrastructure/terraform/` in this repository. `infrastructure/docker/`
+(compose services + the sandbox base image) is the entire deployment surface.
+
 ## Alternatives considered
 
 | Option                                                      | Pros                                                                                                      | Cons                                                                                                                             | Why not chosen                                                                                                                                                   |
@@ -56,6 +62,8 @@ this machine's existing containers from unrelated work.
 - Swapping GitHub PAT → GitHub App later touches only `packages/github`'s auth strategy, not callers.
 - `docker-compose.yml` here must keep using 5433/6380 (or update this ADR and the `.env.example`
   together) as long as this machine also runs the other project's containers on 5432/6379.
+- Horizontal scaling and multi-node scheduling are not goals of this architecture. If load ever
+  requires more than one VM, that's a future ADR, not an assumption baked in today.
 
 ## References
 

@@ -35,8 +35,6 @@ packages/
   playwright/          Reserved — Phase 2
 infrastructure/
   docker/              Compose services + sandbox base image
-  kubernetes/          Reserved — not built in Phase 1
-  terraform/           Reserved — not built in Phase 1
 docs/
   adr/                 Architecture decision records
   architecture/        System design notes
