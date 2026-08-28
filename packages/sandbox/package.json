@@ -2,7 +2,7 @@
   "name": "@maddox-bot/sandbox",
   "version": "0.1.0",
   "private": true,
-  "description": "Docker sandbox lifecycle: create/clone/exec-with-limits/destroy, via the worker's mounted Docker socket.",
+  "description": "Docker sandbox lifecycle: create/exec-with-limits/destroy, via the worker's mounted Docker socket.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,8 +12,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --coverage"
   },
+  "dependencies": {
+    "dockerode": "^4.0.3"
+  },
   "devDependencies": {
+    "@maddox-bot/git": "workspace:*",
+    "@types/dockerode": "^3.3.31",
     "@vitest/coverage-v8": "^2.1.8",
+    "simple-git": "^3.27.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

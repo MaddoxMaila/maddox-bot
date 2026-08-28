@@ -15,11 +15,15 @@ corepack enable
 pnpm install
 cp .env.example .env   # fill in values as later increments ask for them
 docker compose up -d   # Postgres on localhost:5433, Redis on localhost:6380
+docker build -t maddox-bot-sandbox:latest -f infrastructure/docker/sandbox.Dockerfile infrastructure/docker/
 ```
 
 > This project's compose file intentionally does not use the default 5432/6379 ports, since this
 > machine may already have other projects' Postgres/Redis containers running on those ports. Check
 > `docker ps` if you're unsure what's already up before changing them.
+
+The sandbox image build is a one-time step (not part of `pnpm install`) — `packages/sandbox`'s
+tests fail with a clear error if it's missing. Rebuild after changing the Dockerfile.
 
 ## Common commands
 

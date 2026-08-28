@@ -4,3 +4,4 @@ coverage
 node_modules
 pnpm-lock.yaml
 *.md.orig
+tests/fixtures/sample-repo
