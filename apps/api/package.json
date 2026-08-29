@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@fastify/websocket": "^11.0.2",
+    "@maddox-bot/agent-core": "workspace:*",
     "@maddox-bot/database": "workspace:*",
     "@maddox-bot/events": "workspace:*",
     "@maddox-bot/github": "workspace:*",

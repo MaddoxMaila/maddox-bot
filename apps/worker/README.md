@@ -108,5 +108,10 @@ registry today is safe-tier, so this should never actually fire in practice.
 - **Persisted `workspaces` rows.** Each task run gets a real clone + a real sandbox container
   (`workspace.ts`), but neither is recorded in the `workspaces` table — nothing reads workspace
   status yet (that's for whatever first needs to show it, e.g. a VS Code dashboard).
-- **Pause/cancel signals reaching a running phase.** `TaskStateMachine` can represent `PAUSED`, but
-  nothing external can request it mid-run yet — there's no API surface to send that signal from.
+- **Pause signals reaching a running phase.** `TaskStateMachine` can represent `PAUSED`, but nothing
+  external can request it mid-run yet — there's no API surface to send that signal from, and no
+  point in the loop that checks for one. Cancellation is different and _is_ wired now: `apps/api`'s
+  `POST /tasks/:id/cancel` (increment 16) transitions the row straight to `CANCELLED` itself,
+  without needing this package's involvement — but a worker already mid-loop on that task still
+  won't notice until whatever it's doing finishes or crashes, for the same reason pause can't
+  interrupt one either.

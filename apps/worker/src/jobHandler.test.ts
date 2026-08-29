@@ -132,4 +132,16 @@ describe("handleAgentTriggerJob", () => {
     );
     expect(mockedRunTask).not.toHaveBeenCalled();
   });
+
+  it("handles a direct-trigger job (VS Code's 'implement <KEY>') exactly like a jira one", async () => {
+    const jiraClient = fakeJiraClient();
+    const payload = jiraPayload({ source: "direct", eventType: "direct.implement_issue" });
+
+    await handleAgentTriggerJob(deps({ jiraClient }), payload);
+
+    expect(jiraClient.getIssue).toHaveBeenCalledWith("PROJ-1");
+    const task = await database.agentTasks.findByReceivedEventId(payload.receivedEventId);
+    expect(task).not.toBeNull();
+    expect(mockedRunTask).toHaveBeenCalledWith(expect.anything(), task?.id);
+  });
 });

@@ -6,12 +6,25 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./buildApp.js";
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function defer<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe("task routes", () => {
   const database = Database.forUrl(testDatabaseUrl());
-  const agentTriggerQueue = new BullMqJobQueue<AgentTriggerJobPayload>(
-    `agent-triggers-test-${createId()}`,
-    { redisUrl: testRedisUrl() },
-  );
+  const agentTriggerQueueName = `agent-triggers-test-${createId()}`;
+  const agentTriggerQueue = new BullMqJobQueue<AgentTriggerJobPayload>(agentTriggerQueueName, {
+    redisUrl: testRedisUrl(),
+  });
   const taskResumeQueue = new BullMqJobQueue<TaskResumeJobPayload>(
     `task-resume-test-${createId()}`,
     { redisUrl: testRedisUrl() },
@@ -137,6 +150,172 @@ describe("task routes", () => {
     it("404s for a task that doesn't exist", async () => {
       const response = await app.inject({ method: "GET", url: `/tasks/${createId()}/approvals` });
       expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe("POST /tasks (direct trigger)", () => {
+    it("rejects a missing repositoryId or issueKey", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/tasks",
+        payload: { repositoryId },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("404s for a repository that doesn't exist", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/tasks",
+        payload: { repositoryId: createId(), issueKey: "PROJ-1" },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it("enqueues a direct AgentTriggerJobPayload and returns its receivedEventId", async () => {
+      const received = defer<AgentTriggerJobPayload>();
+      const consumer = new BullMqJobQueue<AgentTriggerJobPayload>(agentTriggerQueueName, {
+        redisUrl: testRedisUrl(),
+      });
+      consumer.process(async (data) => {
+        if (data.eventType === "direct.implement_issue" && data.repositoryId === repositoryId) {
+          received.resolve(data);
+        }
+      });
+
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/tasks",
+          payload: { repositoryId, issueKey: "PROJ-42" },
+        });
+
+        expect(response.statusCode).toBe(202);
+        const body = response.json() as { receivedEventId: string };
+        expect(body.receivedEventId).toEqual(expect.any(String));
+
+        const job = await received.promise;
+        expect(job).toMatchObject({
+          source: "direct",
+          repositoryId,
+          externalRefs: { issueKey: "PROJ-42" },
+          receivedEventId: body.receivedEventId,
+        });
+      } finally {
+        await consumer.close();
+      }
+    }, 10000);
+  });
+
+  describe("GET /tasks/by-received-event/:receivedEventId", () => {
+    it("returns null when no task matches", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/tasks/by-received-event/${createId()}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ task: null });
+    });
+
+    it("returns the task a prior job attempt produced", async () => {
+      const receivedEventId = createId();
+      const produced = await database.agentTasks.create({
+        organizationId,
+        repositoryId,
+        trigger: { kind: "direct", receivedEventId },
+        bounds: {},
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/tasks/by-received-event/${receivedEventId}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ task: { id: produced.id } });
+    });
+  });
+
+  describe("GET /tasks/:id/pull-request", () => {
+    it("returns null for a task with no pull request yet", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/tasks/${taskId}/pull-request`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ pullRequest: null });
+    });
+
+    it("404s for a task that doesn't exist", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/tasks/${createId()}/pull-request`,
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it("returns the linked pull request once one exists", async () => {
+      const task = await database.agentTasks.create({
+        organizationId,
+        repositoryId,
+        trigger: {},
+        bounds: {},
+      });
+      const pullRequest = await database.pullRequests.create({
+        taskId: task.id,
+        repositoryId,
+        providerPrNumber: 99,
+        url: "https://github.com/acme/sample/pull/99",
+        title: "Implement PROJ-1",
+        body: "Closes PROJ-1",
+        headBranch: "feature/proj-1",
+        baseBranch: "main",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/tasks/${task.id}/pull-request`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        pullRequest: { id: pullRequest.id, url: pullRequest.url },
+      });
+    });
+  });
+
+  describe("POST /tasks/:id/cancel", () => {
+    it("404s for a task that doesn't exist", async () => {
+      const response = await app.inject({ method: "POST", url: `/tasks/${createId()}/cancel` });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it("cancels a task in a non-terminal state", async () => {
+      const task = await database.agentTasks.create({
+        organizationId,
+        repositoryId,
+        trigger: {},
+        bounds: {},
+      });
+
+      const response = await app.inject({ method: "POST", url: `/tasks/${task.id}/cancel` });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ task: { id: task.id, state: "CANCELLED" } });
+    });
+
+    it("409s for a task already in a terminal state", async () => {
+      const task = await database.agentTasks.create({
+        organizationId,
+        repositoryId,
+        trigger: {},
+        bounds: {},
+      });
+      await app.inject({ method: "POST", url: `/tasks/${task.id}/cancel` });
+
+      const response = await app.inject({ method: "POST", url: `/tasks/${task.id}/cancel` });
+
+      expect(response.statusCode).toBe(409);
     });
   });
 });

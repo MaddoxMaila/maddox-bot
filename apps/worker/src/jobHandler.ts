@@ -83,7 +83,10 @@ export async function handleAgentTriggerJob(
   deps: WorkerDependencies,
   payload: AgentTriggerJobPayload,
 ): Promise<void> {
-  if (payload.source === "jira") {
+  // "direct" (the VS Code extension's explicit "implement <ISSUE-KEY>" command) is handled
+  // identically to a Jira webhook trigger — both resolve to "fetch this issue key and implement
+  // it," just via a different front door.
+  if (payload.source === "jira" || payload.source === "direct") {
     await handleJiraTrigger(deps, payload);
   } else {
     await handleGitHubTrigger(deps, payload);

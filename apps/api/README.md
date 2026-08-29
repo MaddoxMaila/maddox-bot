@@ -1,8 +1,9 @@
 # @maddox-bot/api
 
-Fastify app: two webhook receivers (increment 7), read-only task/approval REST endpoints, an
-approval-decision endpoint, and a polling WebSocket gateway (increment 15). Session CRUD and the
-VS Code extension's own auth are still increment 16.
+Fastify app: two webhook receivers (increment 7), task/approval REST endpoints (increment 15),
+a polling WebSocket gateway (increment 15), and the direct-trigger/cancel/pull-request endpoints
+the VS Code extension (increment 16) drives its chat commands through. Session CRUD and any real
+auth for the extension are still not here — see "What's deliberately not here yet" below.
 
 ## `POST /webhooks/github`
 
@@ -30,11 +31,37 @@ The queued `AgentTriggerJobPayload` is deliberately not a full `agent_task` row 
 relevant Jira trigger into one (fetching the issue, upserting a `JiraIssue`, creating the task) is
 `apps/worker`'s job, not event ingestion's.
 
-## `GET /tasks`, `/tasks/:id`, `/tasks/:id/events`, `/tasks/:id/tool-calls`, `/tasks/:id/approvals`
+## `GET /tasks`, `/tasks/:id`, `/tasks/:id/events`, `/tasks/:id/tool-calls`, `/tasks/:id/approvals`, `/tasks/:id/pull-request`
 
 Read-only. `GET /tasks` requires a `repositoryId` query parameter rather than listing across the
 whole system — the only client so far (a VS Code extension working in one open repository) never
 needs a cross-repository view, and `AgentTaskRepository` has no such query either.
+`/tasks/:id/pull-request` returns `{ pullRequest: null }` before one exists — it's what the VS
+Code extension's "show diff" chat command actually resolves to (see `apps/vscode-extension`'s
+README): no diff is ever persisted anywhere, since the sandbox that produced it is ephemeral, so
+the linked PR's URL is the only durable artifact worth showing.
+
+## `POST /tasks` (direct trigger) and `GET /tasks/by-received-event/:receivedEventId`
+
+The VS Code extension's "implement `<ISSUE-KEY>`" chat command (plan section 3's "direct trigger"),
+added in increment 16. This route deliberately does **not** create the `AgentTask` itself — fetching
+the Jira issue and resolving it into a task is `apps/worker`'s job for every other trigger source
+too (`jobHandler.ts`), and apps/api has no Jira client wired in to duplicate that. Instead it
+enqueues the exact same `AgentTriggerJobPayload` a Jira webhook would, tagged `source: "direct"`,
+so `apps/worker` handles it through identical logic (see `apps/worker`'s README). Because task
+creation then happens asynchronously, this route can't return a task id directly — it returns a
+`receivedEventId` instead, which `GET /tasks/by-received-event/:receivedEventId` can be polled with
+until the worker produces the task (or `{ task: null }` if it hasn't yet).
+
+## `POST /tasks/:id/cancel`
+
+Reuses `@maddox-bot/agent-core`'s `TaskStateMachine`/`canTransition` rather than re-implementing
+transition legality and audit logging a second time — `CANCELLED` is reachable from any
+non-terminal state, so this 409s on a task already terminal and 200s otherwise. This only marks the
+row: a worker actively mid-loop on the task won't notice until its next dispatch, since (per
+`apps/worker`'s README) nothing yet lets a signal reach a running phase mid-flight. Genuinely useful
+today mainly for tasks parked in `AWAITING_APPROVAL`, `BLOCKED`, or `AWAITING_HUMAN_REVIEW` — the
+common case, since `autoApprovePlans` defaults to skipping the approval wait entirely.
 
 ## `GET /approvals` and `POST /approvals/:id/decide`
 
@@ -72,6 +99,19 @@ latency — imperceptible for a human watching a task's progress. On connect it 
 snapshot (current state + every existing event), then only new events plus the current state on
 each subsequent tick that actually changed something. Redis pub/sub (already a dependency, for
 BullMQ) is the natural upgrade path if that latency ever actually matters.
+
+## What's deliberately not here yet
+
+- **No auth on any REST/WS route.** The original plan assumed a long-lived local API token issued
+  at setup, stored in the VS Code extension's `SecretStorage`. Building that needs a real place to
+  issue and check tokens against (a `UserRepository`/session concept that doesn't exist yet — see
+  `packages/database`'s README), which is more than increment 16's VS Code extension actually
+  needed to be useful against a single trusted local deployment. `apps/vscode-extension`'s README
+  documents this as a known gap on its side too, rather than building a fake token check here that
+  nothing would actually enforce.
+- **Session CRUD.** `agent_sessions` (a VS Code chat thread that can span multiple tasks) has a
+  schema but no repository or routes yet — the extension tracks "the current task" client-side
+  instead of a persisted session.
 
 ## Local development
 

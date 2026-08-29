@@ -1,20 +1,56 @@
 {
   "name": "@maddox-bot/vscode-extension",
+  "displayName": "Maddox Bot",
+  "description": "Chat with and monitor the Maddox Bot agent platform: implement Jira tickets, track task progress, and decide plan approvals from VS Code.",
   "version": "0.1.0",
   "private": true,
-  "description": "VS Code extension: chat and task dashboard, WebSocket client to the API.",
+  "publisher": "maddox-bot",
+  "license": "UNLICENSED",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/extension.cjs",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "maddoxBot.openPanel",
+        "title": "Maddox Bot: Open Panel"
+      }
+    ],
+    "configuration": {
+      "title": "Maddox Bot",
+      "properties": {
+        "maddoxBot.apiBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "Base URL of the maddox-bot API (apps/api)."
+        },
+        "maddoxBot.repositoryId": {
+          "type": "string",
+          "default": "",
+          "description": "The `repositories.id` row (in maddox-bot's database) that this workspace corresponds to. There's no registration UI yet — see this extension's README for how to find it."
+        }
+      }
+    }
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node esbuild.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --coverage"
   },
   "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.5.13",
     "@vitest/coverage-v8": "^2.1.8",
+    "esbuild": "^0.24.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "ws": "^8.18.0"
   }
 }
