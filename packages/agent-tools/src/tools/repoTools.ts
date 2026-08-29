@@ -1,6 +1,6 @@
 import { minimatch } from "minimatch";
 import { z } from "zod";
-import { readFileWithHash, walkFiles } from "../repoFileWalker.js";
+import { readFileWithHash, walkFiles, writeFileEnsuringDir } from "../repoFileWalker.js";
 import type { ToolDefinition } from "../toolDefinition.js";
 
 const BINARY_EXTENSIONS = new Set([
@@ -93,8 +93,18 @@ const findReferencesInputSchema = z.object({
 
 const findDefinitionInputSchema = z.object({ symbol: z.string().min(1) });
 
-/** Read-only for increment 11. repo.write_file is wired in increment 13. */
-export function createRepoTools(baseDir: string): ToolDefinition[] {
+const writeFileInputSchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+  /** The `sha` from a prior repo.read_file call on this path. Omit to create a new file or
+   * overwrite unconditionally; when given, the write is rejected if the file's current content
+   * (or absence) no longer matches — the file changed since it was last read. */
+  expectedSha: z.string().optional(),
+});
+
+/** Since increment 11. Kept separate from createRepoWriteTools() so a role like the Planner can be
+ * registered with read tools only. */
+export function createRepoReadTools(baseDir: string): ToolDefinition[] {
   const search: ToolDefinition<z.infer<typeof searchInputSchema>> = {
     name: "repo.search",
     description:
@@ -174,4 +184,43 @@ export function createRepoTools(baseDir: string): ToolDefinition[] {
   };
 
   return [search, readFile, listFiles, findReferences, findDefinition];
+}
+
+/** Added in increment 13, alongside the Implementation Agent — the only role that gets it. */
+export function createRepoWriteTools(baseDir: string): ToolDefinition[] {
+  const writeFileTool: ToolDefinition<z.infer<typeof writeFileInputSchema>> = {
+    name: "repo.write_file",
+    description:
+      "Write a file's content, creating intermediate directories as needed. Pass expectedSha " +
+      "(from a prior repo.read_file) to reject the write if the file changed since it was read.",
+    inputSchema: writeFileInputSchema,
+    async execute(input) {
+      if (input.expectedSha !== undefined) {
+        const current = await readFileWithHash(baseDir, input.path).catch(() => null);
+        if (current?.sha !== input.expectedSha) {
+          return {
+            ok: false,
+            error: {
+              code: "stale_write",
+              message: `"${input.path}" has changed since it was last read — re-read it before writing.`,
+            },
+          };
+        }
+      }
+      try {
+        const { sha } = await writeFileEnsuringDir(baseDir, input.path, input.content);
+        return { ok: true, output: { path: input.path, sha } };
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: "write_failed",
+            message: error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+    },
+  };
+
+  return [writeFileTool];
 }

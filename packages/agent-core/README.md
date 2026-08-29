@@ -2,10 +2,10 @@
 
 The orchestration layer: `TaskStateMachine`, `ContextBuilder`, and `AgentLoopRunner` drive the
 Planner and Implementation Agent roles over one shared tool-use loop (approved plan, section 6).
-**Planner only for increment 12** — `PlannerRunner` wires the pieces together end-to-end
-(`CREATED -> ANALYZING -> PLANNED`/`BLOCKED`); the Implementation Agent (`AWAITING_APPROVAL ->
-... -> PR_CREATED`) is increment 13's job, reusing `AgentLoopRunner` with a different
-`AgentLoopOptions` value rather than a separate code path.
+`PlannerRunner` (increment 12) wires `CREATED -> ANALYZING -> PLANNED`/`BLOCKED`.
+`ImplementationAgentRunner` (increment 13) wires `AWAITING_APPROVAL -> IMPLEMENTING -> TESTING
+<-> FIXING -> SELF_REVIEW -> PR_CREATED -> AWAITING_HUMAN_REVIEW` — both reuse the same
+`AgentLoopRunner` with a different `AgentLoopOptions` value, not a separate code path.
 
 ## Design
 
@@ -29,9 +29,11 @@ A single Claude turn is either "call more tools" or "give a final answer" — Ph
 tool use and structured output in the same call. So the Planner's shape is: loop on
 `llm.toolCall()` until a turn comes back with no `tool_use` blocks, then make exactly one
 `llm.structuredOutput()` call (Zod schema `implementationPlanSchema`, via `messages.parse()`
-under the hood) to get the final `ImplementationPlan`. A role with no `structuredOutput` configured
-(the Implementation Agent, later) just stops when the model stops calling tools — its output is its
-side effects, not a schema-shaped answer.
+under the hood) to get the final `ImplementationPlan`. The Implementation Agent's own tool-use
+loops configure no `structuredOutput` at all — they just stop when the model stops calling tools;
+its output is its side effects (files written, commits made), not a schema-shaped answer. (Its
+_self-review_ step is a separate, single `structuredOutput()` call outside the tool-use loop
+entirely — see below.)
 
 ### TaskStateMachine: the happy path is a graph, resuming isn't
 
@@ -55,12 +57,51 @@ failure to produce a plan (timeout or exhausted tool-call budget), `PlannerRunne
 `BLOCKED` instead and records a `planning_failed` task event, rather than silently leaving the task
 in `ANALYZING` or claiming a nonexistent plan.
 
+### ImplementationAgentRunner: only _writing code_ and _fixing failures_ are LLM-driven
+
+Everything else in the Implementation Agent's flow — running the verification suite, pushing,
+opening the PR with a well-defined template, linking Jira — is deterministic code in
+`ImplementationAgentRunner`, not something left to the model's judgement to remember to do
+correctly. Concretely:
+
+- **IMPLEMENTING**: one `AgentLoopRunner.run()` call, full read/write toolset, no `structuredOutput`
+  — the model writes code, adds tests, and commits until it stops calling tools.
+- **TESTING**: _not_ an LLM call at all. `runVerificationGate()` calls
+  `shell.run_build/lint/typecheck/tests` directly (through the same `executeAndRecordTool` path an
+  LLM tool call would use, so the audit trail doesn't distinguish who decided to make the call) and
+  collects every failure, not just the first.
+- **FIXING**: if the gate failed, another bounded `AgentLoopRunner.run()` call, continuing the
+  _same_ conversation (the accumulated `messages` from the prior attempt, not a fresh transcript)
+  with the failure output appended as a user message — the model needs to remember what it already
+  wrote to fix it intelligently. Up to `maxFixAttempts` (default 3, per section 6) before giving up.
+- **SELF_REVIEW**: a lightweight, non-blocking pass — one `structuredOutput()` call (`selfReviewSchema`)
+  over the final `git.diff`, _outside_ the tool-use loop entirely. Phase 1 doesn't act on what it
+  finds beyond recording it in the PR body; this is not spec §35's full independent-context
+  adversarial review.
+- **PR_CREATED**: push, then `github.create_pr` with a title/body built by `pullRequestTemplate.ts`
+  (shaped after Infinite-Forge's own PR template — Overview / Files Changed / Testing / Checklist —
+  applied to what an autonomously-generated PR actually has to report), then `pullRequests.create()`
+  persists the structured row.
+- **Jira linking is best-effort, deliberately not fatal.** `jira.link_pr` and (if
+  `targetReviewStatus` is given) `jira.update_issue` run after the PR already exists; either one
+  failing is recorded as a `jira_link_failed`/`jira_transition_failed` task event but does **not**
+  block the result — the PR is the primary deliverable, and it already succeeded. `targetReviewStatus`
+  is optional and caller-supplied rather than hardcoded, since transition names are workflow-specific
+  (e.g. "In Review" vs. "Code Review") and this package has no business assuming one.
+
+Every failure path (branch creation, an incomplete implementation/fix loop, push, PR creation, or
+exhausting the fix-retry budget) records a task event describing _why_, then transitions to
+`BLOCKED` — never left dangling in an active state, and never silently swallowed.
+
 ### What's in `task_events` vs. `tool_calls`
 
-`task_events` stays coarse-grained (state transitions, `plan_produced`/`planning_failed`) — it's the
-VS Code timeline's data source. The fine-grained per-call record (every tool invocation, its
-permission tier, its result) lives in `tool_calls`/`tool_results` instead, written directly by
-`AgentLoopRunner`. Duplicating every tool call into `task_events` too would just be timeline noise.
+`task_events` stays coarse-grained (state transitions, `plan_produced`/`planning_failed`,
+`pull_request_created`, `jira_link_failed`, ...) — it's the VS Code timeline's data source. The
+fine-grained per-call record (every tool invocation, its permission tier, its result) lives in
+`tool_calls`/`tool_results` instead, written by the shared `executeAndRecordTool()` helper
+(`toolExecution.ts`) that both `AgentLoopRunner` (an LLM-driven call) and `ImplementationAgentRunner`
+(a programmatic one, e.g. the verification gate) go through. Duplicating every tool call into
+`task_events` too would just be timeline noise.
 
 ### Increment 11 gap fixed here: `ToolResult` didn't expose its permission tier
 
@@ -90,16 +131,28 @@ key that Anthropic's `input_schema` has no use for, so `toLLMToolDefinitions` st
 
 ## What's deliberately not here yet
 
-- **Which tools a role gets, wired from real clients** (GitHub/Jira/git/sandbox with live config)
-  is the worker's job (increment 14), not this package's. The end-to-end test constructs its own
-  `ToolRegistry` directly from a fixture repo for exactly this reason.
-  `ContextBuilder`/`buildPlannerContext` takes pre-fetched Jira/repo data for the same reason —
-  fetching it is I/O the caller does first, which keeps context assembly synchronous and trivially
-  testable.
+- **Which tools a role gets, wired from real clients with live config** (a real GitHub PAT, a real
+  Jira site, a real Docker sandbox) is the worker's job (increment 14), not this package's — it
+  only ever receives an already-populated `ToolRegistry`. `@maddox-bot/git`/`github`/`jira` appear
+  here only as **devDependencies**, for the end-to-end tests' own fixture setup (a real local git
+  repo with a real bare remote; a real `GitHubClient`/`JiraClient` wrapping a fake wire client) —
+  agent-core's actual source never imports them. `ContextBuilder`'s functions take pre-fetched
+  Jira/repo/plan data for the matching reason: fetching it is I/O the caller does first, which
+  keeps context assembly synchronous and trivially testable.
 - **Approval rows.** `AgentLoopOptions.requestApproval` is a plain injected callback; nothing here
-  creates an `Approval` row yet, since the Planner's tools are all safe-tier and never reach it in
-  practice. That machinery arrives with whatever actually needs it (the Implementation Agent's
-  approval-required tools, or the API's approval endpoints).
+  creates an `Approval` row, since every tool wired into the end-to-end tests is safe-tier and
+  never reaches it in practice. That machinery arrives with whatever actually needs it — most
+  likely the API's approval endpoints, once a human is the one deciding.
 - **Pause/cancel while a loop is running.** `TaskStateMachine` can represent `PAUSED` and resume
   from it, but nothing yet calls it mid-run — there's no cancellation signal wired into
   `AgentLoopRunner`'s loop. That's worker territory (increment 14).
+- **Branch-name templating.** `ImplementationAgentInput.branchName` is a plain pre-computed string,
+  the same convention as everything else this package takes pre-fetched — interpolating
+  `repositories.branch_naming_template` is the caller's job.
+- **Large-deletion approval enforcement.** The plan's own permission table calls out "heuristically
+  large deletions" as approval-required, but `@maddox-bot/permissions`' `PermissionGate.classifyCommit`
+  can only classify it if a `linesDeleted` count is actually supplied — and nothing computes and
+  passes one yet (the registry stays git-agnostic by design, so it can't compute a diff itself; the
+  alternative, a `git.commit` tool that self-gates via `ctx.requestApproval` after computing its own
+  diff, is real but not built). `git.commit` is safe-tier unconditionally for now — a known,
+  documented Phase 1 gap, not a silently dropped requirement.

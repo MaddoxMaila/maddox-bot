@@ -124,6 +124,12 @@ importers:
       '@maddox-bot/git':
         specifier: workspace:*
         version: link:../git
+      '@maddox-bot/github':
+        specifier: workspace:*
+        version: link:../github
+      '@maddox-bot/jira':
+        specifier: workspace:*
+        version: link:../jira
       '@vitest/coverage-v8':
         specifier: ^2.1.8
         version: 2.1.9(vitest@2.1.9(@types/node@22.20.1))

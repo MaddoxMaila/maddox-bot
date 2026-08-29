@@ -12,6 +12,7 @@ import type {
 } from "@maddox-bot/llm";
 import type { ZodType } from "zod";
 import { toLLMToolDefinitions } from "./toolConversion.js";
+import { executeAndRecordTool } from "./toolExecution.js";
 
 const DEFAULT_MAX_TOOL_CALLS = 40;
 const DEFAULT_MAX_DURATION_MS = 30 * 60 * 1000;
@@ -41,10 +42,6 @@ export interface AgentLoopResult<TOutput = void> {
   toolCallCount: number;
   output: TOutput | null;
   stopReason: "completed" | "max_tool_calls" | "timeout";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -127,21 +124,15 @@ export class AgentLoopRunner {
     block: ToolUseBlock,
     ctx: ToolExecutionContext,
   ): Promise<ToolResultBlock> {
-    const outcome = await this.toolRegistry.execute(block.name, block.input, ctx);
-
-    await this.database.toolCalls.createCompleted({
+    const outcome = await executeAndRecordTool(
+      this.database,
+      this.toolRegistry,
       taskId,
       role,
-      toolName: block.name,
-      input: isRecord(block.input) ? block.input : { value: block.input },
-      permissionDecision: outcome.permission?.tier ?? "not_classified",
-      result: {
-        ok: outcome.ok,
-        durationMs: outcome.durationMs,
-        ...(outcome.output !== undefined && { output: outcome.output }),
-        ...(outcome.error !== undefined && { error: outcome.error }),
-      },
-    });
+      block.name,
+      block.input,
+      ctx,
+    );
 
     const content = outcome.ok
       ? JSON.stringify(outcome.output ?? null)

@@ -32,19 +32,15 @@ describe("PullRequestRepository", () => {
       data: { organizationId, repositoryId, trigger: {}, bounds: {} },
     });
     taskId = task.id;
-    // No PullRequestRepository.create() yet (write path is increment 13) — insert directly via
-    // Prisma here, the same way any other pre-increment-13 test fixture would have to.
-    const pr = await prisma.pullRequest.create({
-      data: {
-        taskId,
-        repositoryId,
-        providerPrNumber: 1842,
-        url: "https://github.com/owner/repo/pull/1842",
-        title: "PROJ-481: Add password reset flow",
-        body: "Summary...",
-        headBranch: "feature/PROJ-481-password-reset",
-        baseBranch: "main",
-      },
+    const pr = await repository.create({
+      taskId,
+      repositoryId,
+      providerPrNumber: 1842,
+      url: "https://github.com/owner/repo/pull/1842",
+      title: "PROJ-481: Add password reset flow",
+      body: "Summary...",
+      headBranch: "feature/PROJ-481-password-reset",
+      baseBranch: "main",
     });
     pullRequestId = pr.id;
   });
@@ -55,6 +51,36 @@ describe("PullRequestRepository", () => {
     await prisma.repository.delete({ where: { id: repositoryId } });
     await prisma.organization.delete({ where: { id: organizationId } });
     await prisma.$disconnect();
+  });
+
+  it("creates a pull request in the open status by default", async () => {
+    // pull_requests.task_id is unique (1:1 with AgentTask) — needs its own task, not `taskId`.
+    const otherTask = await prisma.agentTask.create({
+      data: { organizationId, repositoryId, trigger: {}, bounds: {} },
+    });
+
+    const created = await repository.create({
+      taskId: otherTask.id,
+      repositoryId,
+      providerPrNumber: 1843,
+      url: "https://github.com/owner/repo/pull/1843",
+      title: "PROJ-482: Add health check endpoint",
+      body: "Summary...",
+      headBranch: "feature/PROJ-482-health-check",
+      baseBranch: "main",
+    });
+
+    expect(created).toMatchObject({
+      taskId: otherTask.id,
+      repositoryId,
+      providerPrNumber: 1843,
+      url: "https://github.com/owner/repo/pull/1843",
+      title: "PROJ-482: Add health check endpoint",
+      status: "open",
+    });
+
+    await prisma.pullRequest.delete({ where: { id: created.id } });
+    await prisma.agentTask.delete({ where: { id: otherTask.id } });
   });
 
   it("finds a pull request by repository and provider PR number", async () => {

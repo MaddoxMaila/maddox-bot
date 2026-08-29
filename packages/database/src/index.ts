@@ -4,7 +4,10 @@ export type {
   CreateOrganizationInput,
   OrganizationRecord,
 } from "./repositories/organizationRepository.js";
-export type { PullRequestRecord } from "./repositories/pullRequestRepository.js";
+export type {
+  CreatePullRequestInput,
+  PullRequestRecord,
+} from "./repositories/pullRequestRepository.js";
 export type {
   CreateReceivedEventInput,
   ReceivedEventRecord,

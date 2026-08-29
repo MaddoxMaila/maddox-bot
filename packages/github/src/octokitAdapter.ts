@@ -45,5 +45,20 @@ export function createOctokitAdapter(token: string): OctokitLike {
       });
       return data as RawGitHubReview[];
     },
+    async createPullRequest(owner, repo, params) {
+      const { data } = await octokit.rest.pulls.create({
+        owner,
+        repo,
+        title: params.title,
+        body: params.body,
+        head: params.head,
+        base: params.base,
+        ...(params.draft !== undefined && { draft: params.draft }),
+      });
+      return data as RawGitHubPullRequest;
+    },
+    async createIssueComment(owner, repo, issueNumber, body) {
+      await octokit.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body });
+    },
   };
 }

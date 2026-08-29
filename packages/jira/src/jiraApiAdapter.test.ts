@@ -76,4 +76,51 @@ describe("createJiraApiAdapter", () => {
 
     await expect(adapter.getIssue("MISSING-1")).rejects.toThrow(/404/);
   });
+
+  it("addComment POSTs the ADF body wrapped in a { body } envelope", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ id: "1" }));
+    const adapter = createJiraApiAdapter(CREDENTIALS);
+    const adf = { type: "doc", version: 1, content: [] };
+
+    await adapter.addComment("PROJ-481", adf);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.atlassian.net/rest/api/3/issue/PROJ-481/comment",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ body: adf }),
+      }),
+    );
+  });
+
+  it("getTransitions requests the transitions endpoint and unwraps the array", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ transitions: [{ id: "21", name: "Done", to: { name: "In Review" } }] }),
+    );
+    const adapter = createJiraApiAdapter(CREDENTIALS);
+
+    const result = await adapter.getTransitions("PROJ-481");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.atlassian.net/rest/api/3/issue/PROJ-481/transitions",
+      expect.anything(),
+    );
+    expect(result).toEqual([{ id: "21", name: "Done", to: { name: "In Review" } }]);
+  });
+
+  it("postTransition POSTs the transition id and tolerates a 204 No Content response", async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 204, statusText: "No Content" });
+    const adapter = createJiraApiAdapter(CREDENTIALS);
+
+    await adapter.postTransition("PROJ-481", "21");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.atlassian.net/rest/api/3/issue/PROJ-481/transitions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ transition: { id: "21" } }),
+      }),
+    );
+  });
 });

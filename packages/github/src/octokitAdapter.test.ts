@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockRepos, mockPulls, mockIssues } = vi.hoisted(() => ({
   mockRepos: { get: vi.fn() },
-  mockPulls: { get: vi.fn(), listReviews: vi.fn() },
-  mockIssues: { listComments: vi.fn() },
+  mockPulls: { get: vi.fn(), listReviews: vi.fn(), create: vi.fn() },
+  mockIssues: { listComments: vi.fn(), createComment: vi.fn() },
 }));
 
 vi.mock("@octokit/rest", () => ({
@@ -90,5 +90,56 @@ describe("createOctokitAdapter", () => {
       pull_number: 42,
     });
     expect(result).toEqual([{ id: 1 }]);
+  });
+
+  it("createPullRequest calls pulls.create and unwraps .data", async () => {
+    mockPulls.create.mockResolvedValue({ data: { number: 7 } });
+    const adapter = createOctokitAdapter("test-token");
+
+    const result = await adapter.createPullRequest("octocat", "hello-world", {
+      title: "Add feature",
+      body: "Implements PROJ-1",
+      head: "feature/proj-1",
+      base: "main",
+    });
+
+    expect(mockPulls.create).toHaveBeenCalledWith({
+      owner: "octocat",
+      repo: "hello-world",
+      title: "Add feature",
+      body: "Implements PROJ-1",
+      head: "feature/proj-1",
+      base: "main",
+    });
+    expect(result).toEqual({ number: 7 });
+  });
+
+  it("createPullRequest forwards draft only when explicitly set", async () => {
+    mockPulls.create.mockResolvedValue({ data: {} });
+    const adapter = createOctokitAdapter("test-token");
+
+    await adapter.createPullRequest("octocat", "hello-world", {
+      title: "t",
+      body: "b",
+      head: "h",
+      base: "main",
+      draft: true,
+    });
+
+    expect(mockPulls.create).toHaveBeenCalledWith(expect.objectContaining({ draft: true }));
+  });
+
+  it("createIssueComment calls issues.createComment with issue_number", async () => {
+    mockIssues.createComment.mockResolvedValue({ data: {} });
+    const adapter = createOctokitAdapter("test-token");
+
+    await adapter.createIssueComment("octocat", "hello-world", 7, "Looks good");
+
+    expect(mockIssues.createComment).toHaveBeenCalledWith({
+      owner: "octocat",
+      repo: "hello-world",
+      issue_number: 7,
+      body: "Looks good",
+    });
   });
 });

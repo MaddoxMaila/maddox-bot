@@ -1,6 +1,7 @@
 import type { GitHubClient } from "@maddox-bot/github";
 import { describe, expect, it, vi } from "vitest";
-import { createGitHubReadTools } from "./githubTools.js";
+import type { ToolDefinition } from "../toolDefinition.js";
+import { createGitHubReadTools, createGitHubWriteTools } from "./githubTools.js";
 
 function fakeGitHubClient(overrides: Partial<GitHubClient> = {}): GitHubClient {
   return {
@@ -9,11 +10,13 @@ function fakeGitHubClient(overrides: Partial<GitHubClient> = {}): GitHubClient {
     getPullRequestDiff: vi.fn().mockResolvedValue("diff --git a b"),
     getPullRequestComments: vi.fn().mockResolvedValue([]),
     getReviews: vi.fn().mockResolvedValue([]),
+    createPullRequest: vi.fn().mockResolvedValue({ number: 7, url: "https://example.com/pr/7" }),
+    commentOnPullRequest: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as GitHubClient;
 }
 
-function findTool(tools: ReturnType<typeof createGitHubReadTools>, name: string) {
+function findTool(tools: ToolDefinition[], name: string) {
   const tool = tools.find((candidate) => candidate.name === name);
   if (!tool) {
     throw new Error(`tool not found: ${name}`);
@@ -71,5 +74,82 @@ describe("createGitHubReadTools", () => {
     const tool = findTool(createGitHubReadTools(client), "github.get_reviews");
     await tool.execute({ owner: "octocat", repo: "hello-world", number: 42 }, {} as never);
     expect(client.getReviews).toHaveBeenCalledWith("octocat", "hello-world", 42);
+  });
+});
+
+describe("createGitHubWriteTools", () => {
+  it("registers the two write GitHub tools", () => {
+    const tools = createGitHubWriteTools(fakeGitHubClient());
+    expect(tools.map((tool) => tool.name).sort()).toEqual(["github.comment", "github.create_pr"]);
+  });
+
+  it("github.create_pr delegates and omits draft when not provided", async () => {
+    const client = fakeGitHubClient();
+    const tool = findTool(createGitHubWriteTools(client), "github.create_pr");
+
+    const outcome = await tool.execute(
+      {
+        owner: "octocat",
+        repo: "hello-world",
+        title: "Add feature",
+        body: "Implements PROJ-1",
+        head: "feature/proj-1",
+        base: "main",
+      },
+      {} as never,
+    );
+
+    expect(client.createPullRequest).toHaveBeenCalledWith("octocat", "hello-world", {
+      title: "Add feature",
+      body: "Implements PROJ-1",
+      head: "feature/proj-1",
+      base: "main",
+    });
+    expect(outcome).toEqual({
+      ok: true,
+      output: { number: 7, url: "https://example.com/pr/7" },
+    });
+  });
+
+  it("github.create_pr forwards draft when explicitly set", async () => {
+    const client = fakeGitHubClient();
+    const tool = findTool(createGitHubWriteTools(client), "github.create_pr");
+
+    await tool.execute(
+      {
+        owner: "octocat",
+        repo: "hello-world",
+        title: "t",
+        body: "b",
+        head: "h",
+        base: "main",
+        draft: true,
+      },
+      {} as never,
+    );
+
+    expect(client.createPullRequest).toHaveBeenCalledWith(
+      "octocat",
+      "hello-world",
+      expect.objectContaining({ draft: true }),
+    );
+  });
+
+  it("github.comment delegates to commentOnPullRequest", async () => {
+    const client = fakeGitHubClient();
+    const tool = findTool(createGitHubWriteTools(client), "github.comment");
+
+    const outcome = await tool.execute(
+      { owner: "octocat", repo: "hello-world", number: 7, body: "Looks good" },
+      {} as never,
+    );
+
+    expect(client.commentOnPullRequest).toHaveBeenCalledWith(
+      "octocat",
+      "hello-world",
+      7,
+      "Looks good",
+    );
+    expect(outcome).toEqual({ ok: true, output: undefined });
   });
 });

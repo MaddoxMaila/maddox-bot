@@ -1,4 +1,5 @@
 import type { ConversationMessage } from "@maddox-bot/llm";
+import type { ImplementationPlan } from "./implementationPlan.js";
 
 export interface JiraIssueContext {
   key: string;
@@ -57,6 +58,72 @@ Repository: ${repository.owner}/${repository.name} (default branch: ${repository
 
   const messages: ConversationMessage[] = [
     { role: "user", content: "Begin your investigation and propose an implementation plan." },
+  ];
+
+  return { system, messages };
+}
+
+export interface ImplementationJiraContext {
+  key: string;
+  summary: string;
+}
+
+export interface ImplementationContextInput {
+  plan: ImplementationPlan;
+  jiraIssue: ImplementationJiraContext;
+}
+
+function planFileList(files: ImplementationPlan["filesToCreate"]): string {
+  return files.length > 0
+    ? files.map((file) => `- ${file.path} — ${file.reason}`).join("\n")
+    : "(none)";
+}
+
+/**
+ * The Implementation Agent's context is deliberately the Planner's *structured* plan plus a
+ * compact Jira summary — not the Planner's raw exploration transcript (keep context lean, spec
+ * §28). Pure and synchronous for the same reason buildPlannerContext() is: the caller assembles
+ * any I/O-backed data first.
+ */
+export function buildImplementationContext(input: ImplementationContextInput): BuiltContext {
+  const { plan, jiraIssue } = input;
+
+  const requiredTests =
+    plan.requiredTests.length > 0
+      ? plan.requiredTests.map((test) => `- ${test}`).join("\n")
+      : "(none)";
+  const risksList = plan.risks.map((risk) => `- ${risk}`).join("\n");
+  const risksBlock = plan.risks.length > 0 ? `\nKnown risks:\n${risksList}` : "";
+
+  const system = `You are the Implementation Agent for an autonomous software engineering system. \
+You have been given an approved implementation plan; your job is to carry it out using your \
+read/write tools: write the code, add or update tests, and commit your work. Push once you're done.
+
+A separate, deterministic verification step runs the project's build/lint/typecheck/test scripts \
+after you stop calling tools — if it finds problems, you will be given the failure output in a \
+follow-up message and asked to fix them, so you do not need to guess whether your work is complete \
+before stopping.
+
+Jira issue: ${jiraIssue.key} — ${jiraIssue.summary}
+
+Plan summary: ${plan.summary}
+Approach: ${plan.approach}
+
+Files to create:
+${planFileList(plan.filesToCreate)}
+
+Files to modify:
+${planFileList(plan.filesToModify)}
+
+Required tests:
+${requiredTests}${risksBlock}`;
+
+  const messages: ConversationMessage[] = [
+    {
+      role: "user",
+      content:
+        "Implement the plan now. Write the code, add or update the required tests, then commit and push your work.",
+    },
   ];
 
   return { system, messages };

@@ -1,8 +1,8 @@
 # @maddox-bot/jira
 
 A Jira Cloud REST v3 client (Basic auth via email + API token) and webhook token verification.
-**Read-only for now** — `getIssue`, `getComments`. Write operations (`updateIssue`, `addComment`,
-`linkPr`) are added in increment 13 alongside the Implementation Agent that needs them.
+Read operations since increment 6 — `getIssue`, `getComments`. Write operations since
+increment 13 — `addComment`, `transitionIssue`, `linkPullRequest`.
 
 Uses Node's built-in `fetch` — no HTTP client dependency.
 
@@ -30,7 +30,21 @@ Jira Cloud's generic webhook feature has no built-in request-signing scheme like
 header. `verifyJiraWebhookToken` checks a shared-secret token instead (configured into the webhook
 URL itself), using a constant-time comparison to avoid a timing side-channel on the secret.
 
-## What this increment does _not_ need
+## Writing: `textToAdf`, and why `transitionIssue` needs two calls
+
+Jira Cloud's v3 API requires rich-text fields (comment bodies) as ADF, not plain strings —
+`textToAdf.ts` is the write-side counterpart to `adfToPlainText`, producing the minimal valid ADF
+for a plain-text comment (one paragraph per non-empty line). `linkPullRequest` builds its own ADF
+directly instead, with a real `link` mark, since a plain-text URL doesn't render as clickable in
+Jira.
+
+There is no "set status directly" REST call. `transitionIssue(issueKey, targetStatus)` first calls
+`GET .../transitions` to look up the transition **id** for the target status name, then submits
+that id — transitions (and their ids) are configured per-workflow and aren't stable across
+projects, so the id can't be guessed or cached across issues.
+
+## What this package still doesn't need
 
 No live Jira credentials — every test here mocks `fetch`. A real Jira Cloud site and API token are
-needed starting at increment 13, when write operations are added.
+for whenever the platform is actually pointed at a live project end-to-end, not something this
+package's own tests require.

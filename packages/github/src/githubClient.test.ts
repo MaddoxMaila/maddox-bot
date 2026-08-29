@@ -9,6 +9,8 @@ function fakeApi(overrides: Partial<OctokitLike> = {}): OctokitLike {
     getPullRequestDiff: vi.fn(),
     listIssueComments: vi.fn(),
     listReviews: vi.fn(),
+    createPullRequest: vi.fn(),
+    createIssueComment: vi.fn(),
     ...overrides,
   };
 }
@@ -128,5 +130,88 @@ describe("GitHubClient", () => {
       },
       { id: 2, author: "unknown", state: "PENDING", body: null, submittedAt: null },
     ]);
+  });
+
+  it("createPullRequest passes the input through and maps the created PR", async () => {
+    const api = fakeApi({
+      createPullRequest: vi.fn().mockResolvedValue({
+        number: 7,
+        title: "Add feature",
+        body: "Implements PROJ-1",
+        state: "open",
+        draft: false,
+        merged: false,
+        html_url: "https://github.com/octocat/hello-world/pull/7",
+        head: { ref: "feature/proj-1", sha: "abc123" },
+        base: { ref: "main" },
+      }),
+    });
+    const client = new GitHubClient(api);
+
+    const pr = await client.createPullRequest("octocat", "hello-world", {
+      title: "Add feature",
+      body: "Implements PROJ-1",
+      head: "feature/proj-1",
+      base: "main",
+    });
+
+    expect(api.createPullRequest).toHaveBeenCalledWith("octocat", "hello-world", {
+      title: "Add feature",
+      body: "Implements PROJ-1",
+      head: "feature/proj-1",
+      base: "main",
+    });
+    expect(pr).toEqual({
+      number: 7,
+      title: "Add feature",
+      body: "Implements PROJ-1",
+      state: "open",
+      draft: false,
+      merged: false,
+      url: "https://github.com/octocat/hello-world/pull/7",
+      headRef: "feature/proj-1",
+      headSha: "abc123",
+      baseRef: "main",
+    });
+  });
+
+  it("createPullRequest forwards draft only when explicitly set", async () => {
+    const api = fakeApi({
+      createPullRequest: vi.fn().mockResolvedValue({
+        number: 7,
+        title: "Add feature",
+        body: null,
+        state: "open",
+        draft: true,
+        merged: false,
+        html_url: "https://github.com/octocat/hello-world/pull/7",
+        head: { ref: "feature/proj-1", sha: "abc123" },
+        base: { ref: "main" },
+      }),
+    });
+    const client = new GitHubClient(api);
+
+    await client.createPullRequest("octocat", "hello-world", {
+      title: "Add feature",
+      body: "",
+      head: "feature/proj-1",
+      base: "main",
+      draft: true,
+    });
+
+    expect(api.createPullRequest).toHaveBeenCalledWith(
+      "octocat",
+      "hello-world",
+      expect.objectContaining({ draft: true }),
+    );
+  });
+
+  it("commentOnPullRequest delegates to createIssueComment", async () => {
+    const api = fakeApi();
+    const client = new GitHubClient(api);
+
+    await client.commentOnPullRequest("octocat", "hello-world", 7, "Looks good");
+
+    expect(api.createIssueComment).toHaveBeenCalledWith("octocat", "hello-world", 7, "Looks good");
   });
 });

@@ -20,6 +20,9 @@ const DEPENDENCY_INSTALL_PATTERN =
 
 // Every read tool, plus the routine write actions of an already-authorized task (spec §20's own
 // framing: gate the unusual, not the expected deliverables of a task that's already running).
+// No "github.create_branch": branches are a git-protocol concept, not a GitHub REST one — pushing
+// a new ref *is* how a branch comes to exist on GitHub, so git.create_branch + git.push cover it
+// and there's no separate REST call to gate.
 const SAFE_TOOLS = new Set([
   "git.status",
   "git.diff",
@@ -37,7 +40,6 @@ const SAFE_TOOLS = new Set([
   "github.get_pr_diff",
   "github.get_pr_comments",
   "github.get_reviews",
-  "github.create_branch",
   "github.create_pr",
   "github.comment",
   "jira.get_issue",

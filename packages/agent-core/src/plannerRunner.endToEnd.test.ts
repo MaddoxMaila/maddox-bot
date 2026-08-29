@@ -2,7 +2,7 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createGitReadTools, createRepoTools, ToolRegistry } from "@maddox-bot/agent-tools";
+import { createGitReadTools, createRepoReadTools, ToolRegistry } from "@maddox-bot/agent-tools";
 import { Database, testDatabaseUrl } from "@maddox-bot/database";
 import { GitClient } from "@maddox-bot/git";
 import type { GenerateResult, LLMProvider, StructuredOutputResult } from "@maddox-bot/llm";
@@ -80,7 +80,7 @@ describe("PlannerRunner end-to-end (plan increment 12's own verification scenari
   function buildRegistry(): ToolRegistry {
     const gitClient = new GitClient(workDir);
     const registry = new ToolRegistry();
-    for (const tool of [...createRepoTools(workDir), ...createGitReadTools(gitClient)]) {
+    for (const tool of [...createRepoReadTools(workDir), ...createGitReadTools(gitClient)]) {
       registry.register(tool);
     }
     return registry;

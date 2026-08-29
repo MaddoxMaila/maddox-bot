@@ -6,6 +6,9 @@ function fakeApi(overrides: Partial<JiraApiLike> = {}): JiraApiLike {
   return {
     getIssue: vi.fn(),
     getComments: vi.fn(),
+    addComment: vi.fn(),
+    getTransitions: vi.fn(),
+    postTransition: vi.fn(),
     ...overrides,
   };
 }
@@ -89,5 +92,87 @@ describe("JiraClient", () => {
       },
     ]);
     expect(api.getComments).toHaveBeenCalledWith("PROJ-481");
+  });
+
+  it("addComment converts plain text to ADF before sending", async () => {
+    const api = fakeApi();
+    const client = new JiraClient(api);
+
+    await client.addComment("PROJ-481", "Started work on this.");
+
+    expect(api.addComment).toHaveBeenCalledWith("PROJ-481", {
+      type: "doc",
+      version: 1,
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Started work on this." }] }],
+    });
+  });
+
+  it("transitionIssue looks up the transition id for the target status and submits it", async () => {
+    const api = fakeApi({
+      getTransitions: vi.fn().mockResolvedValue([
+        { id: "11", name: "Start Progress", to: { name: "In Progress" } },
+        { id: "21", name: "Done", to: { name: "In Review" } },
+      ]),
+    });
+    const client = new JiraClient(api);
+
+    await client.transitionIssue("PROJ-481", "In Review");
+
+    expect(api.postTransition).toHaveBeenCalledWith("PROJ-481", "21");
+  });
+
+  it("transitionIssue matches the target status case-insensitively", async () => {
+    const api = fakeApi({
+      getTransitions: vi
+        .fn()
+        .mockResolvedValue([{ id: "11", name: "Start Progress", to: { name: "In Progress" } }]),
+    });
+    const client = new JiraClient(api);
+
+    await client.transitionIssue("PROJ-481", "in progress");
+
+    expect(api.postTransition).toHaveBeenCalledWith("PROJ-481", "11");
+  });
+
+  it("transitionIssue throws a descriptive error when no matching transition is available", async () => {
+    const api = fakeApi({
+      getTransitions: vi
+        .fn()
+        .mockResolvedValue([{ id: "11", name: "Start Progress", to: { name: "In Progress" } }]),
+    });
+    const client = new JiraClient(api);
+
+    await expect(client.transitionIssue("PROJ-481", "Done")).rejects.toThrow(
+      /No transition to "Done".*available: In Progress/,
+    );
+    expect(api.postTransition).not.toHaveBeenCalled();
+  });
+
+  it("linkPullRequest posts a comment with a real ADF link mark, not markdown", async () => {
+    const api = fakeApi();
+    const client = new JiraClient(api);
+
+    await client.linkPullRequest("PROJ-481", {
+      url: "https://github.com/acme/widgets/pull/7",
+      title: "Add password reset functionality",
+    });
+
+    expect(api.addComment).toHaveBeenCalledWith("PROJ-481", {
+      type: "doc",
+      version: 1,
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Pull request opened: " },
+            {
+              type: "text",
+              text: "Add password reset functionality",
+              marks: [{ type: "link", attrs: { href: "https://github.com/acme/widgets/pull/7" } }],
+            },
+          ],
+        },
+      ],
+    });
   });
 });

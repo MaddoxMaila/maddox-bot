@@ -21,7 +21,6 @@ describe("PermissionGate — fixed-tier tools", () => {
     "github.get_pr_diff",
     "github.get_pr_comments",
     "github.get_reviews",
-    "github.create_branch",
     "github.create_pr",
     "github.comment",
     "jira.get_issue",

@@ -38,10 +38,26 @@ export interface RawGitHubReview {
   submitted_at: string | null | undefined;
 }
 
+export interface CreatePullRequestParams {
+  title: string;
+  body: string;
+  head: string;
+  base: string;
+  draft?: boolean;
+}
+
 export interface OctokitLike {
   getRepository(owner: string, repo: string): Promise<RawGitHubRepo>;
   getPullRequest(owner: string, repo: string, pullNumber: number): Promise<RawGitHubPullRequest>;
   getPullRequestDiff(owner: string, repo: string, pullNumber: number): Promise<string>;
   listIssueComments(owner: string, repo: string, issueNumber: number): Promise<RawGitHubComment[]>;
   listReviews(owner: string, repo: string, pullNumber: number): Promise<RawGitHubReview[]>;
+  // GitHub's "create a pull request" response is a full PR resource — the same shape getPullRequest
+  // returns — so it reuses RawGitHubPullRequest rather than a separate narrower type.
+  createPullRequest(
+    owner: string,
+    repo: string,
+    params: CreatePullRequestParams,
+  ): Promise<RawGitHubPullRequest>;
+  createIssueComment(owner: string, repo: string, issueNumber: number, body: string): Promise<void>;
 }

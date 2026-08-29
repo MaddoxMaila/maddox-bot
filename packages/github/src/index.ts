@@ -1,6 +1,7 @@
 export { createGitHubClient } from "./createGitHubClient.js";
 export {
   GitHubClient,
+  type CreatePullRequestInput,
   type GitHubCommentInfo,
   type GitHubPullRequestInfo,
   type GitHubRepositoryInfo,
@@ -8,6 +9,7 @@ export {
 } from "./githubClient.js";
 export { createOctokitAdapter } from "./octokitAdapter.js";
 export type {
+  CreatePullRequestParams,
   OctokitLike,
   RawGitHubComment,
   RawGitHubPullRequest,

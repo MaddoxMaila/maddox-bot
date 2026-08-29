@@ -4,10 +4,10 @@ export {
   type PackageManager,
   type ProjectScript,
 } from "./projectToolingDetector.js";
-export { createGitReadTools } from "./tools/gitTools.js";
-export { createGitHubReadTools } from "./tools/githubTools.js";
-export { createJiraReadTools } from "./tools/jiraTools.js";
-export { createRepoTools } from "./tools/repoTools.js";
+export { createGitReadTools, createGitWriteTools } from "./tools/gitTools.js";
+export { createGitHubReadTools, createGitHubWriteTools } from "./tools/githubTools.js";
+export { createJiraReadTools, createJiraWriteTools } from "./tools/jiraTools.js";
+export { createRepoReadTools, createRepoWriteTools } from "./tools/repoTools.js";
 export { createShellTools } from "./tools/shellTools.js";
 export type {
   ToolDefinition,
