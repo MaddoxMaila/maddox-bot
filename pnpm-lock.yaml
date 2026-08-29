@@ -89,10 +89,47 @@ importers:
         version: 2.1.9(@types/node@22.20.1)
 
   apps/worker:
+    dependencies:
+      '@maddox-bot/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
+      '@maddox-bot/agent-tools':
+        specifier: workspace:*
+        version: link:../../packages/agent-tools
+      '@maddox-bot/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@maddox-bot/events':
+        specifier: workspace:*
+        version: link:../../packages/events
+      '@maddox-bot/git':
+        specifier: workspace:*
+        version: link:../../packages/git
+      '@maddox-bot/github':
+        specifier: workspace:*
+        version: link:../../packages/github
+      '@maddox-bot/jira':
+        specifier: workspace:*
+        version: link:../../packages/jira
+      '@maddox-bot/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
+      '@maddox-bot/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
+      '@maddox-bot/sandbox':
+        specifier: workspace:*
+        version: link:../../packages/sandbox
+      '@maddox-bot/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^2.1.8
         version: 2.1.9(vitest@2.1.9(@types/node@22.20.1))
+      simple-git:
+        specifier: ^3.27.0
+        version: 3.36.0
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

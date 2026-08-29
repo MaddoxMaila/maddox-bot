@@ -40,6 +40,22 @@ describe("normalizeGitHubEvent", () => {
     expect(event.externalRefs).toEqual({ repoFullName: "octocat/hello-world" });
   });
 
+  it("captures merged in the payload when the pull_request carries it", () => {
+    const merged = normalizeGitHubEvent("pull_request", "delivery-6", {
+      action: "closed",
+      pull_request: { number: 42, head: { ref: "feature/x" }, merged: true },
+      repository: { full_name: "octocat/hello-world" },
+    });
+    expect(merged.payload).toEqual({ action: "closed", merged: true });
+
+    const closedUnmerged = normalizeGitHubEvent("pull_request", "delivery-7", {
+      action: "closed",
+      pull_request: { number: 42, head: { ref: "feature/x" }, merged: false },
+      repository: { full_name: "octocat/hello-world" },
+    });
+    expect(closedUnmerged.payload).toEqual({ action: "closed", merged: false });
+  });
+
   it("produces the same dedupeKey for the same delivery id", () => {
     const payload = { repository: { full_name: "octocat/hello-world" } };
     const first = normalizeGitHubEvent("push", "delivery-5", payload);

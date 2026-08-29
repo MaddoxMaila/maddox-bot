@@ -21,6 +21,16 @@ export interface CreatePullRequestInput {
   baseBranch: string;
 }
 
+const SELECT_FIELDS = {
+  id: true,
+  taskId: true,
+  repositoryId: true,
+  providerPrNumber: true,
+  url: true,
+  title: true,
+  status: true,
+} as const;
+
 /** Read-only through increment 7 (checking whether an inbound PR event is "ours" before reacting
  * to it). `create` is added here in increment 13, alongside the Implementation Agent — the only
  * thing that populates this table. Status/CI-status updates stay deferred to whatever first needs
@@ -40,15 +50,7 @@ export class PullRequestRepository {
         headBranch: input.headBranch,
         baseBranch: input.baseBranch,
       },
-      select: {
-        id: true,
-        taskId: true,
-        repositoryId: true,
-        providerPrNumber: true,
-        url: true,
-        title: true,
-        status: true,
-      },
+      select: SELECT_FIELDS,
     });
   }
 
@@ -58,15 +60,15 @@ export class PullRequestRepository {
   ): Promise<PullRequestRecord | null> {
     return this.prisma.pullRequest.findUnique({
       where: { repositoryId_providerPrNumber: { repositoryId, providerPrNumber } },
-      select: {
-        id: true,
-        taskId: true,
-        repositoryId: true,
-        providerPrNumber: true,
-        url: true,
-        title: true,
-        status: true,
-      },
+      select: SELECT_FIELDS,
     });
+  }
+
+  /** `taskId` is unique on this table (1:1 with AgentTask) — used by the worker's crash-resume
+   * logic to tell "the Implementation Agent finished, just the state bookkeeping didn't catch up"
+   * apart from "the Implementation Agent never got that far", without needing a provider PR number
+   * on hand. */
+  async findByTaskId(taskId: string): Promise<PullRequestRecord | null> {
+    return this.prisma.pullRequest.findUnique({ where: { taskId }, select: SELECT_FIELDS });
   }
 }

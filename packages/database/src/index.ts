@@ -1,5 +1,6 @@
 export { Database } from "./database.js";
 export type { AgentTaskRecord, CreateAgentTaskInput } from "./repositories/agentTaskRepository.js";
+export type { JiraIssueRecord, UpsertJiraIssueInput } from "./repositories/jiraIssueRepository.js";
 export type {
   CreateOrganizationInput,
   OrganizationRecord,

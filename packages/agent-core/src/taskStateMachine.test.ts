@@ -165,4 +165,43 @@ describe("TaskStateMachine", () => {
       payload: { from: "BLOCKED", to: "FIXING", resumed: true },
     });
   });
+
+  it("forceRecover jumps straight to the target state, bypassing canTransition", async () => {
+    const { database, updateState, createEvent } = fakeDatabase({ state: "TESTING" });
+    const machine = new TaskStateMachine(database);
+
+    // TESTING -> AWAITING_APPROVAL is not a legal graph edge, but forceRecover doesn't check.
+    await machine.forceRecover("task-1", "AWAITING_APPROVAL", "worker_restarted");
+
+    expect(updateState).toHaveBeenCalledWith("task-1", "AWAITING_APPROVAL");
+    expect(createEvent).toHaveBeenCalledWith({
+      taskId: "task-1",
+      type: "state_changed",
+      payload: {
+        from: "TESTING",
+        to: "AWAITING_APPROVAL",
+        reason: "worker_restarted",
+        forced: true,
+      },
+    });
+  });
+
+  it("forceRecover is a no-op when already in the target state", async () => {
+    const { database, updateState, createEvent } = fakeDatabase({ state: "AWAITING_APPROVAL" });
+    const machine = new TaskStateMachine(database);
+
+    await machine.forceRecover("task-1", "AWAITING_APPROVAL", "worker_restarted");
+
+    expect(updateState).not.toHaveBeenCalled();
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  it("forceRecover throws when the task doesn't exist", async () => {
+    const { database } = fakeDatabase({ found: false });
+    const machine = new TaskStateMachine(database);
+
+    await expect(machine.forceRecover("task-1", "AWAITING_APPROVAL", "x")).rejects.toThrow(
+      /No such task/,
+    );
+  });
 });

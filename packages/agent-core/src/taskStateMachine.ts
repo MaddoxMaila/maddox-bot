@@ -89,6 +89,24 @@ export class TaskStateMachine {
     await this.persist(taskId, current.state, target, { resumed: true });
   }
 
+  /**
+   * Used only by crash recovery: resets a task straight to `to`, bypassing canTransition() —
+   * after a worker restart, the task's real-world side effects (a PR that does or doesn't exist
+   * yet) are the actual source of truth, not whatever graph edge would normally apply from
+   * whatever state a crash happened to leave it in. A no-op if already in the target state, so a
+   * caller doesn't need to check first.
+   */
+  async forceRecover(taskId: string, to: TaskState, reason: string): Promise<void> {
+    const current = await this.database.agentTasks.findById(taskId);
+    if (!current) {
+      throw new Error(`No such task: ${taskId}`);
+    }
+    if (current.state === to) {
+      return;
+    }
+    await this.persist(taskId, current.state, to, { reason, forced: true });
+  }
+
   private async requireCurrentState(taskId: string, expected: TaskState): Promise<TaskState> {
     const current = await this.database.agentTasks.findById(taskId);
     if (!current) {

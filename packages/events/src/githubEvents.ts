@@ -34,7 +34,10 @@ export function normalizeGitHubEvent(
         branch: payload.pull_request.head.ref,
       }),
     },
-    payload: payload.action !== undefined ? { action: payload.action } : {},
+    payload: {
+      ...(payload.action !== undefined && { action: payload.action }),
+      ...(payload.pull_request?.merged !== undefined && { merged: payload.pull_request.merged }),
+    },
     rawPayload: payload as unknown as Record<string, unknown>,
   };
 }

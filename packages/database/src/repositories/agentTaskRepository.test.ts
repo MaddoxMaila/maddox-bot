@@ -138,4 +138,57 @@ describe("AgentTaskRepository", () => {
 
     expect(newerIndex).toBeLessThan(olderIndex);
   });
+
+  it("listByStates finds tasks across repositories matching any of the given states", async () => {
+    const created = await repository.create({
+      organizationId,
+      repositoryId,
+      trigger: {},
+      bounds: {},
+    });
+    createdTaskIds.push(created.id);
+    await repository.updateState(created.id, "ANALYZING");
+
+    const found = await repository.listByStates(["ANALYZING", "TESTING"]);
+
+    expect(found.some((task) => task.id === created.id)).toBe(true);
+    expect(found.every((task) => task.state === "ANALYZING" || task.state === "TESTING")).toBe(
+      true,
+    );
+  });
+
+  it("listByStates never returns a task outside the requested states", async () => {
+    const created = await repository.create({
+      organizationId,
+      repositoryId,
+      trigger: {},
+      bounds: {},
+    });
+    createdTaskIds.push(created.id);
+    // Left in CREATED — not one of the states queried for below.
+
+    const found = await repository.listByStates(["COMPLETED", "CANCELLED"]);
+
+    expect(found.some((task) => task.id === created.id)).toBe(false);
+  });
+
+  it("findByReceivedEventId finds a task created from that webhook event", async () => {
+    const receivedEventId = createId();
+    const created = await repository.create({
+      organizationId,
+      repositoryId,
+      trigger: { kind: "jira_event", receivedEventId },
+      bounds: {},
+    });
+    createdTaskIds.push(created.id);
+
+    const found = await repository.findByReceivedEventId(receivedEventId);
+
+    expect(found?.id).toBe(created.id);
+  });
+
+  it("findByReceivedEventId returns null for an event that never created a task", async () => {
+    const found = await repository.findByReceivedEventId(createId());
+    expect(found).toBeNull();
+  });
 });

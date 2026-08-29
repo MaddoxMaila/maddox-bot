@@ -1,3 +1,4 @@
+export type { AgentTriggerJobPayload } from "./agentTriggerJob.js";
 export { computeDedupeKey } from "./dedupeKey.js";
 export {
   evaluateGitHubRelevance,

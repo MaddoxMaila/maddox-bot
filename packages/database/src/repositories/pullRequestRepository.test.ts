@@ -98,4 +98,20 @@ describe("PullRequestRepository", () => {
     const found = await repository.findByRepositoryAndProviderNumber(repositoryId, 9999);
     expect(found).toBeNull();
   });
+
+  it("finds a pull request by task id", async () => {
+    const found = await repository.findByTaskId(taskId);
+    expect(found).toMatchObject({ id: pullRequestId, providerPrNumber: 1842 });
+  });
+
+  it("returns null for a task with no pull request yet", async () => {
+    const taskWithoutPr = await prisma.agentTask.create({
+      data: { organizationId, repositoryId, trigger: {}, bounds: {} },
+    });
+
+    const found = await repository.findByTaskId(taskWithoutPr.id);
+
+    expect(found).toBeNull();
+    await prisma.agentTask.delete({ where: { id: taskWithoutPr.id } });
+  });
 });

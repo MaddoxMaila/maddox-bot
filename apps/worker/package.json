@@ -12,8 +12,22 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --coverage"
   },
+  "dependencies": {
+    "@maddox-bot/agent-core": "workspace:*",
+    "@maddox-bot/agent-tools": "workspace:*",
+    "@maddox-bot/database": "workspace:*",
+    "@maddox-bot/events": "workspace:*",
+    "@maddox-bot/git": "workspace:*",
+    "@maddox-bot/github": "workspace:*",
+    "@maddox-bot/jira": "workspace:*",
+    "@maddox-bot/llm": "workspace:*",
+    "@maddox-bot/queue": "workspace:*",
+    "@maddox-bot/sandbox": "workspace:*",
+    "@maddox-bot/shared": "workspace:*"
+  },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.1.8",
+    "simple-git": "^3.27.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

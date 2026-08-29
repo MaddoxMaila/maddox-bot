@@ -1,9 +1,8 @@
 import { Database } from "@maddox-bot/database";
+import type { AgentTriggerJobPayload } from "@maddox-bot/events";
 import { BullMqJobQueue } from "@maddox-bot/queue";
-import { createLogger } from "@maddox-bot/shared";
-import type { AgentTriggerJobPayload } from "./agentTriggerJob.js";
+import { createLogger, requireEnv } from "@maddox-bot/shared";
 import { buildApp } from "./buildApp.js";
-import { requireEnv } from "./env.js";
 
 const logger = createLogger("api");
 

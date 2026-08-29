@@ -97,6 +97,31 @@ export class AgentTaskRepository {
     return rows.map(toRecord);
   }
 
+  /** Across every repository — used by the worker's startup recovery to find tasks a prior crash
+   * left mid-flight, without needing to already know which repository they belong to. */
+  async listByStates(states: TaskState[]): Promise<AgentTaskRecord[]> {
+    const rows = await this.prisma.agentTask.findMany({
+      where: { state: { in: states } },
+      orderBy: { createdAt: "asc" },
+    });
+    return rows.map(toRecord);
+  }
+
+  /**
+   * `trigger.receivedEventId` is a JSON field, not an indexed column — there's no uniqueness
+   * constraint stopping two `create()` calls for the same webhook delivery. That gap is real: a
+   * BullMQ job whose handler throws partway through retries automatically (the queue's own
+   * `attempts: 3`), and without this check a retry would call `create()` again and produce a
+   * second AgentTask for one webhook event. The job handler calls this first and reuses whatever
+   * it finds instead of creating a duplicate.
+   */
+  async findByReceivedEventId(receivedEventId: string): Promise<AgentTaskRecord | null> {
+    const row = await this.prisma.agentTask.findFirst({
+      where: { trigger: { path: ["receivedEventId"], equals: receivedEventId } },
+    });
+    return row ? toRecord(row) : null;
+  }
+
   /** Records `previousState` from whatever is currently persisted, so a PAUSED task can resume. */
   async updateState(id: string, state: TaskState): Promise<AgentTaskRecord> {
     const current = await this.prisma.agentTask.findUniqueOrThrow({ where: { id } });

@@ -1,12 +1,11 @@
 import { createHmac } from "node:crypto";
 import { Database, testDatabaseUrl } from "@maddox-bot/database";
-import { computeDedupeKey } from "@maddox-bot/events";
+import { computeDedupeKey, type AgentTriggerJobPayload } from "@maddox-bot/events";
 import { BullMqJobQueue, testRedisUrl } from "@maddox-bot/queue";
 import { createId, createLogger } from "@maddox-bot/shared";
 import { PrismaClient } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import type { AgentTriggerJobPayload } from "./agentTriggerJob.js";
 import { buildApp } from "./buildApp.js";
 
 const GITHUB_SECRET = "test-github-secret";

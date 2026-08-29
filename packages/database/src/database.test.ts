@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { afterAll, describe, expect, it } from "vitest";
 import { Database } from "./database.js";
 import { AgentTaskRepository } from "./repositories/agentTaskRepository.js";
+import { JiraIssueRepository } from "./repositories/jiraIssueRepository.js";
 import { OrganizationRepository } from "./repositories/organizationRepository.js";
 import { PullRequestRepository } from "./repositories/pullRequestRepository.js";
 import { ReceivedEventRepository } from "./repositories/receivedEventRepository.js";
@@ -17,7 +18,7 @@ describe("Database", () => {
     await db.disconnect();
   });
 
-  it("wires up all seven repositories", () => {
+  it("wires up all eight repositories", () => {
     expect(db.organizations).toBeInstanceOf(OrganizationRepository);
     expect(db.repositories).toBeInstanceOf(RepositoryRepository);
     expect(db.agentTasks).toBeInstanceOf(AgentTaskRepository);
@@ -25,6 +26,7 @@ describe("Database", () => {
     expect(db.receivedEvents).toBeInstanceOf(ReceivedEventRepository);
     expect(db.taskEvents).toBeInstanceOf(TaskEventRepository);
     expect(db.toolCalls).toBeInstanceOf(ToolCallRepository);
+    expect(db.jiraIssues).toBeInstanceOf(JiraIssueRepository);
   });
 
   it("can be constructed with the default client", async () => {

@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { createPrismaClient } from "./client.js";
 import { AgentTaskRepository } from "./repositories/agentTaskRepository.js";
+import { JiraIssueRepository } from "./repositories/jiraIssueRepository.js";
 import { OrganizationRepository } from "./repositories/organizationRepository.js";
 import { PullRequestRepository } from "./repositories/pullRequestRepository.js";
 import { ReceivedEventRepository } from "./repositories/receivedEventRepository.js";
@@ -20,6 +21,7 @@ export class Database {
   readonly receivedEvents: ReceivedEventRepository;
   readonly taskEvents: TaskEventRepository;
   readonly toolCalls: ToolCallRepository;
+  readonly jiraIssues: JiraIssueRepository;
 
   constructor(private readonly prisma: PrismaClient = createPrismaClient()) {
     this.organizations = new OrganizationRepository(prisma);
@@ -29,6 +31,7 @@ export class Database {
     this.receivedEvents = new ReceivedEventRepository(prisma);
     this.taskEvents = new TaskEventRepository(prisma);
     this.toolCalls = new ToolCallRepository(prisma);
+    this.jiraIssues = new JiraIssueRepository(prisma);
   }
 
   /**

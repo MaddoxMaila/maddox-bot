@@ -33,16 +33,30 @@ fail.
 
 ## What's implemented vs. deferred
 
-`Database` wires up `organizations`, `repositories`, `agentTasks`, `pullRequests` (read-only), and
-`receivedEvents`. `PullRequestRepository` was pulled forward from increment 13 because increment
-7's GitHub event relevance check ("is this PR one the platform created?") needs it now; only
-`findByRepositoryAndProviderNumber` exists — `create` and status updates are still increment 13's,
-since real PR creation is the only thing that will ever populate this table until then.
+`Database` wires up eight repositories: `organizations`, `repositories`, `agentTasks`,
+`pullRequests`, `receivedEvents`, `taskEvents`, `toolCalls`, `jiraIssues`. Each repository class
+was added in the increment that actually needed it, not predicted in advance — several landed
+earlier or later than a first guess at the schedule would have suggested:
 
-The remaining entities' repository classes are added in the increment that actually needs them,
-e.g. `JiraIssueRepository` (increment 13), `WorkspaceRepository` (increment 8), `ToolCallRepository`
-/ `ApprovalRepository` (increments 11–12). Their tables already exist from increment 3's migration
-so adding those classes later needs no further schema change.
+- `PullRequestRepository` was pulled forward to increment 7, read-only
+  (`findByRepositoryAndProviderNumber`), because that increment's GitHub event relevance check ("is
+  this PR one the platform created?") needed it immediately. `create`/`findByTaskId` didn't arrive
+  until increment 13 (real PR creation) and increment 14 (the worker's crash-recovery check,
+  "does a PR already exist for this task?") respectively.
+- `TaskEventRepository`/`ToolCallRepository` arrived in increment 12 alongside `agent-core`'s
+  `TaskStateMachine`/`AgentLoopRunner` — the first things that needed an audit trail to write to.
+- `JiraIssueRepository` arrived in increment 14 (the worker), not increment 13 as a much earlier
+  guess at the schedule had it — the Implementation Agent (increment 13) only ever _reads_ a
+  Jira issue's key/summary, already passed in by its caller; nothing needed to persist Jira's
+  current issue state until the worker had to resolve a webhook event into a real task.
+- `AgentTaskRepository.findByReceivedEventId` (increment 14) exists specifically to make task
+  creation idempotent against BullMQ's own automatic job retries — see `apps/worker`'s README for
+  why that's a different problem from a worker _process_ crashing.
+
+`WorkspaceRepository`/`ApprovalRepository` still don't exist — nothing persists workspace status or
+creates approval rows yet (see `apps/worker`'s and `packages/agent-core`'s READMEs for exactly what
+that's waiting on). Their tables already exist from increment 3's migration, so adding those
+classes later needs no further schema change.
 
 ## Local development
 
