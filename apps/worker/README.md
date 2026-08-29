@@ -94,6 +94,15 @@ mid-run gets `denyWithoutHuman()` — a safe-by-default deny, logged loudly, sin
 `tool_approval` row ever created and no human to actually ask. Every tool wired into either role's
 registry today is safe-tier, so this should never actually fire in practice.
 
+## The live end-to-end test
+
+`src/livePipeline.e2e.test.ts` is plan increment 17's own verification scenario — the same
+Jira-trigger-to-opened-PR pipeline `workerPipeline.endToEnd.test.ts` proves with fakes, run instead
+against a real GitHub repo, a real Jira Cloud issue, and a real (unscripted) Anthropic model. It's
+part of this package's normal `pnpm test` run but skips cleanly, not as a failure, unless eight
+specific environment variables are all set — see `tests/e2e`'s README for exactly what they are and
+the one-time setup (a disposable repo, a real test issue) it needs.
+
 ## What's deliberately not here yet
 
 - **GitHub-triggered jobs** (closing the loop on a platform-created PR — e.g. merged ->
