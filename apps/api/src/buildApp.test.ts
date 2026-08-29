@@ -1,6 +1,10 @@
 import { createHmac } from "node:crypto";
 import { Database, testDatabaseUrl } from "@maddox-bot/database";
-import { computeDedupeKey, type AgentTriggerJobPayload } from "@maddox-bot/events";
+import {
+  computeDedupeKey,
+  type AgentTriggerJobPayload,
+  type TaskResumeJobPayload,
+} from "@maddox-bot/events";
 import { BullMqJobQueue, testRedisUrl } from "@maddox-bot/queue";
 import { createId, createLogger } from "@maddox-bot/shared";
 import { PrismaClient } from "@prisma/client";
@@ -35,6 +39,10 @@ describe("buildApp webhook routes", () => {
   const agentTriggerQueue = new BullMqJobQueue<AgentTriggerJobPayload>(queueName, {
     redisUrl: testRedisUrl(),
   });
+  const taskResumeQueue = new BullMqJobQueue<TaskResumeJobPayload>(
+    `task-resume-test-${createId()}`,
+    { redisUrl: testRedisUrl() },
+  );
 
   let app: FastifyInstance;
   let organizationId: string;
@@ -50,6 +58,7 @@ describe("buildApp webhook routes", () => {
     app = await buildApp({
       database,
       agentTriggerQueue,
+      taskResumeQueue,
       githubWebhookSecret: GITHUB_SECRET,
       jiraWebhookSecret: JIRA_SECRET,
       logger: createLogger("api-test"),
@@ -74,9 +83,9 @@ describe("buildApp webhook routes", () => {
   afterAll(async () => {
     await app.close();
     await agentTriggerQueue.close();
-    // No PullRequestRepository.create()/AgentTaskRepository-scoped delete yet (write path is
-    // increment 13) — cleaning up these test-only rows goes through raw Prisma the same way the
-    // fixture that created them did.
+    await taskResumeQueue.close();
+    // These fixture rows were created via raw Prisma (the PR one predates
+    // PullRequestRepository.create()), so cleanup goes through raw Prisma too.
     await prisma.pullRequest.deleteMany({ where: { id: { in: createdPullRequestIds } } });
     await prisma.agentTask.deleteMany({ where: { id: { in: createdTaskIds } } });
     await prisma.receivedEvent.deleteMany({ where: { repositoryId } });

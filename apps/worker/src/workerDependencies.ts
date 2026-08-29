@@ -22,12 +22,12 @@ export interface WorkerDependencies {
   sandboxImage: string;
   gitIdentity: GitIdentityConfig;
   /**
-   * Phase 1 has no plan-approval UI yet (the API's approval endpoints are increment 15) — with
-   * this on, the worker approves every plan itself right after PlannerRunner produces one, so the
-   * Jira -> implementation -> PR pipeline can be exercised end-to-end today. The state machine
-   * still records a real AWAITING_APPROVAL -> IMPLEMENTING transition; only the *decision* is
-   * automated. Flip off once a real approval endpoint exists — nothing else about the pipeline
-   * needs to change.
+   * With this on, the worker approves every plan itself the moment a task reaches
+   * AWAITING_APPROVAL, instead of waiting for a real decision via `POST /approvals/:id/decide`
+   * (apps/api). A real `plan_approval` row is still created either way — this only skips waiting
+   * for it to be decided. Useful for exercising the Jira -> implementation -> PR pipeline without
+   * a human in the loop (e.g. local development); off by default in a real deployment once a human
+   * is actually expected to review plans.
    */
   autoApprovePlans: boolean;
   logger: Logger;

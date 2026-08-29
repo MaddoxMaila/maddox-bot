@@ -1,5 +1,14 @@
 export { Database } from "./database.js";
 export type { AgentTaskRecord, CreateAgentTaskInput } from "./repositories/agentTaskRepository.js";
+export {
+  ApprovalAlreadyDecidedError,
+  ApprovalNotFoundError,
+  type ApprovalDecision,
+  type ApprovalKind,
+  type ApprovalRecord,
+  type ApprovalStatus,
+  type CreateApprovalInput,
+} from "./repositories/approvalRepository.js";
 export type { JiraIssueRecord, UpsertJiraIssueInput } from "./repositories/jiraIssueRepository.js";
 export type {
   CreateOrganizationInput,

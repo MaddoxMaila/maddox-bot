@@ -33,10 +33,10 @@ fail.
 
 ## What's implemented vs. deferred
 
-`Database` wires up eight repositories: `organizations`, `repositories`, `agentTasks`,
-`pullRequests`, `receivedEvents`, `taskEvents`, `toolCalls`, `jiraIssues`. Each repository class
-was added in the increment that actually needed it, not predicted in advance — several landed
-earlier or later than a first guess at the schedule would have suggested:
+`Database` wires up nine repositories: `organizations`, `repositories`, `agentTasks`,
+`pullRequests`, `receivedEvents`, `taskEvents`, `toolCalls`, `jiraIssues`, `approvals`. Each
+repository class was added in the increment that actually needed it, not predicted in advance —
+several landed earlier or later than a first guess at the schedule would have suggested:
 
 - `PullRequestRepository` was pulled forward to increment 7, read-only
   (`findByRepositoryAndProviderNumber`), because that increment's GitHub event relevance check ("is
@@ -52,11 +52,19 @@ earlier or later than a first guess at the schedule would have suggested:
 - `AgentTaskRepository.findByReceivedEventId` (increment 14) exists specifically to make task
   creation idempotent against BullMQ's own automatic job retries — see `apps/worker`'s README for
   why that's a different problem from a worker _process_ crashing.
+- `ApprovalRepository` arrived in increment 15, alongside `apps/api`'s approval endpoints — its
+  `decide()` throws two distinct `Error` subclasses (`ApprovalNotFoundError`,
+  `ApprovalAlreadyDecidedError`) rather than one generic `Error` with different messages, after a
+  real bug: Prisma's own errors render a source-code snippet around the failing call, which can
+  _contain_ an unrelated substring a caller's `message.includes(...)` check would false-positive
+  on. See `apps/api`'s README for the specific case that surfaced it. Only `plan_approval` has a
+  real writer (`apps/worker`'s `taskRunner.ts`) — `tool_approval` rows are never created; a tool
+  that unexpectedly needs approval still resolves through the worker's `denyWithoutHuman()`
+  safe-default.
 
-`WorkspaceRepository`/`ApprovalRepository` still don't exist — nothing persists workspace status or
-creates approval rows yet (see `apps/worker`'s and `packages/agent-core`'s READMEs for exactly what
-that's waiting on). Their tables already exist from increment 3's migration, so adding those
-classes later needs no further schema change.
+`WorkspaceRepository` still doesn't exist — nothing persists workspace status yet (see
+`apps/worker`'s README for exactly what that's waiting on). Its table already exists from
+increment 3's migration, so adding that class later needs no further schema change.
 
 ## Local development
 

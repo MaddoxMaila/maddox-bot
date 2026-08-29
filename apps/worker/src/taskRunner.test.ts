@@ -161,9 +161,10 @@ describe("taskRunner", () => {
       expect(mockedImplementationPhase).not.toHaveBeenCalled();
     });
 
-    it("does not auto-approve or implement when autoApprovePlans is off", async () => {
+    it("reaches AWAITING_APPROVAL and creates a pending approval, but does not implement, when autoApprovePlans is off", async () => {
       const task = await createTask();
       mockedPlannerPhase.mockImplementation(async (_deps, t) => {
+        await database.agentTasks.updatePlan(t.id, { summary: "Add a health check endpoint" });
         await database.agentTasks.updateState(t.id, "ANALYZING");
         await database.agentTasks.updateState(t.id, "PLANNED");
       });
@@ -172,7 +173,48 @@ describe("taskRunner", () => {
 
       expect(mockedImplementationPhase).not.toHaveBeenCalled();
       const finalTask = await requireTask(deps(), task.id);
-      expect(finalTask.state).toBe("PLANNED");
+      expect(finalTask.state).toBe("AWAITING_APPROVAL");
+      const approvals = await database.approvals.listByTask(task.id);
+      expect(approvals).toHaveLength(1);
+      expect(approvals[0]).toMatchObject({ kind: "plan_approval", status: "pending" });
+    });
+
+    it("implements once a plan_approval is recorded as approved, even with autoApprovePlans off", async () => {
+      const task = await createTask();
+      mockedPlannerPhase.mockImplementation(async (_deps, t) => {
+        await database.agentTasks.updatePlan(t.id, { summary: "Add a health check endpoint" });
+        await database.agentTasks.updateState(t.id, "ANALYZING");
+        await database.agentTasks.updateState(t.id, "PLANNED");
+      });
+
+      // First call reaches AWAITING_APPROVAL and stops — simulating the API's approval endpoint
+      // deciding it, then enqueuing a resume — by deciding it directly and calling runTask again.
+      await runTask(deps({ autoApprovePlans: false }), task.id);
+      const pending = await database.approvals.listByTask(task.id);
+      await database.approvals.decide(pending[0]?.id ?? "", "approved");
+
+      await runTask(deps({ autoApprovePlans: false }), task.id);
+
+      expect(mockedImplementationPhase).toHaveBeenCalledOnce();
+    });
+
+    it("cancels the task when a plan_approval is recorded as denied", async () => {
+      const task = await createTask();
+      mockedPlannerPhase.mockImplementation(async (_deps, t) => {
+        await database.agentTasks.updatePlan(t.id, { summary: "Add a health check endpoint" });
+        await database.agentTasks.updateState(t.id, "ANALYZING");
+        await database.agentTasks.updateState(t.id, "PLANNED");
+      });
+
+      await runTask(deps({ autoApprovePlans: false }), task.id);
+      const pending = await database.approvals.listByTask(task.id);
+      await database.approvals.decide(pending[0]?.id ?? "", "denied");
+
+      await runTask(deps({ autoApprovePlans: false }), task.id);
+
+      expect(mockedImplementationPhase).not.toHaveBeenCalled();
+      const finalTask = await requireTask(deps(), task.id);
+      expect(finalTask.state).toBe("CANCELLED");
     });
 
     it("THE key property: resuming a task that crashed after its PR was created never re-invokes the Implementation Agent", async () => {

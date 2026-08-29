@@ -13,6 +13,7 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
+    "@fastify/websocket": "^11.0.2",
     "@maddox-bot/database": "workspace:*",
     "@maddox-bot/events": "workspace:*",
     "@maddox-bot/github": "workspace:*",
@@ -24,8 +25,10 @@
   },
   "devDependencies": {
     "@prisma/client": "^6.19.3",
+    "@types/ws": "^8.5.13",
     "@vitest/coverage-v8": "^2.1.8",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "ws": "^8.18.0"
   }
 }

@@ -33,6 +33,9 @@ describe("OrganizationRepository", () => {
 
   it("lists organizations ordered by creation time", async () => {
     const first = await repository.create({ name: `test-org-${createId()}` });
+    // createdAt has millisecond precision; back-to-back creates can otherwise tie, making their
+    // relative order in list()'s result (asc by createdAt) undefined rather than insertion order.
+    await new Promise((resolve) => setTimeout(resolve, 5));
     const second = await repository.create({ name: `test-org-${createId()}` });
     createdIds.push(first.id, second.id);
 

@@ -13,3 +13,4 @@ export {
 } from "./jiraEvents.js";
 export type { NormalizedEventCore, RelevanceResult } from "./normalizedEvent.js";
 export { parseJiraTriggerConfig } from "./parseJiraTriggerConfig.js";
+export type { TaskResumeJobPayload } from "./taskResumeJob.js";

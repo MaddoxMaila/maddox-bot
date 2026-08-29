@@ -39,6 +39,27 @@ async function requireRepository(
   return repository;
 }
 
+/** The most recent plan_approval for this task, if one exists — a task only ever has one, but
+ * "most recent" is still the honest read in case that ever changes. */
+async function findPlanApproval(deps: WorkerDependencies, taskId: string) {
+  const approvals = await deps.database.approvals.listByTask(taskId);
+  return approvals.find((approval) => approval.kind === "plan_approval") ?? null;
+}
+
+async function buildPlanApprovalSummary(
+  deps: WorkerDependencies,
+  task: AgentTaskRecord,
+): Promise<string> {
+  const plan = task.plan as { summary?: string } | null;
+  if (task.jiraIssueId) {
+    const jiraIssue = await deps.database.jiraIssues.findById(task.jiraIssueId);
+    if (jiraIssue) {
+      return `${jiraIssue.issueKey}: ${plan?.summary ?? jiraIssue.summary}`;
+    }
+  }
+  return plan?.summary ?? "Implementation plan";
+}
+
 /**
  * Recovers a task left mid-flight by a crashed worker, so runTask always starts from a state it
  * knows how to drive forward. ANALYZING has no external side effects (the Planner never writes
@@ -89,10 +110,11 @@ export async function recoverIfStuck(
 
 /**
  * Drives one task forward exactly as far as its current state (after crash recovery) allows, then
- * returns — it does not loop across states in a single call beyond the two hops (CREATED ->
- * planned, PLANNED -> approved) that don't need a human in between yet. Safe to call repeatedly
- * and safe to call after a crash: recoverIfStuck() always leaves the task in a state this function
- * knows how to drive from.
+ * returns — it does not loop across states in a single call beyond the hops that don't need a
+ * human in between (CREATED -> planned -> awaiting approval). Safe to call repeatedly: this is
+ * exactly what runs again after a crash (recoverIfStuck() always leaves the task in a state this
+ * function knows how to drive from), after `POST /approvals/:id/decide` enqueues a resume, and on
+ * a completely fresh task — the same dispatch either way.
  */
 export async function runTask(deps: WorkerDependencies, taskId: string): Promise<void> {
   const stateMachine = new TaskStateMachine(deps.database);
@@ -104,20 +126,33 @@ export async function runTask(deps: WorkerDependencies, taskId: string): Promise
     task = await requireTask(deps, task.id);
   }
 
-  if (task.state === "PLANNED" && deps.autoApprovePlans) {
-    await stateMachine.transition(task.id, "PLANNED", "AWAITING_APPROVAL", { autoApproved: true });
+  // Reaching AWAITING_APPROVAL is automatic (planning finished, one way or another) — creating the
+  // plan_approval row a human decides on is what happens *at* that transition, not conditional on
+  // autoApprovePlans. Only the *next* step (actually implementing) waits for a decision.
+  if (task.state === "PLANNED") {
+    await stateMachine.transition(task.id, "PLANNED", "AWAITING_APPROVAL");
+    await deps.database.approvals.create({
+      taskId: task.id,
+      kind: "plan_approval",
+      summary: await buildPlanApprovalSummary(deps, task),
+    });
     task = await requireTask(deps, task.id);
   }
 
   if (task.state === "AWAITING_APPROVAL") {
-    if (!deps.autoApprovePlans) {
-      deps.logger.info(
-        { taskId: task.id },
-        "plan awaiting human approval — nothing more to do yet",
-      );
+    const planApproval = await findPlanApproval(deps, task.id);
+    if (deps.autoApprovePlans || planApproval?.status === "approved") {
+      await runImplementationPhase(deps, task, repository);
       return;
     }
-    await runImplementationPhase(deps, task, repository);
+    if (planApproval?.status === "denied") {
+      await stateMachine.transition(task.id, "AWAITING_APPROVAL", "CANCELLED", {
+        reason: "plan_denied",
+      });
+      deps.logger.info({ taskId: task.id }, "plan approval was denied — task cancelled");
+      return;
+    }
+    deps.logger.info({ taskId: task.id }, "plan awaiting human approval — nothing more to do yet");
     return;
   }
 

@@ -9,22 +9,29 @@ own READMEs describe as "the worker's job."
 ## The pipeline
 
 ```
-BullMQ job (AgentTriggerJobPayload)
+BullMQ job (AgentTriggerJobPayload)                    BullMQ job (TaskResumeJobPayload)
+        │                                                       │
+        ▼                                                       │
+jobHandler.ts — resolve or create the AgentTask                 │
+(idempotently — see below)                                      │
+        │                                                       │
+        ▼                                                       ▼
+                    taskRunner.ts: recover if left mid-flight by a crash, then dispatch on state
         │
-        ▼
-jobHandler.ts — resolve or create the AgentTask for this event (idempotently — see below)
-        │
-        ▼
-taskRunner.ts — recover if the task was left mid-flight by a crash, then dispatch on its state
-        │
-        ├─ CREATED              → plannerPhase.ts   (clone + sandbox → PlannerRunner)
-        ├─ PLANNED (auto-approve) → transition to AWAITING_APPROVAL
-        └─ AWAITING_APPROVAL (auto-approve) → implementationPhase.ts (clone + sandbox → ImplementationAgentRunner)
+        ├─ CREATED              → plannerPhase.ts (clone + sandbox → PlannerRunner)
+        ├─ PLANNED              → transition to AWAITING_APPROVAL, create a pending plan_approval
+        └─ AWAITING_APPROVAL
+              ├─ approved (or autoApprovePlans) → implementationPhase.ts (clone + sandbox → ImplementationAgentRunner)
+              ├─ denied                          → transition to CANCELLED
+              └─ still pending                    → stop; nothing more to do until a decision exists
 ```
 
+Both queues funnel into the exact same `runTask()` — a fresh task, a crash-recovered one, and one
+a human just approved via `apps/api`'s `POST /approvals/:id/decide` (which enqueues onto
+`task-resume`, a separate queue from `agent-triggers`) all go through identical dispatch logic.
 `startupRecovery.ts` runs this same dispatch for every task left in a non-terminal, non-paused
 state when the worker process starts — a crash mid-task and a plain restart between two steps are
-handled by the exact same code path.
+handled by the exact same code path too.
 
 ## Two different idempotency problems, two different fixes
 
@@ -69,20 +76,23 @@ making another. `trigger.receivedEventId` is a JSON field, not an indexed column
 uniqueness constraint would be a cleaner long-term fix, revisit if this lookup ever shows up in a
 performance profile.
 
-## Auto-approving plans (a stopgap, not a design decision)
+## Plan approval is real now; `autoApprovePlans` is a bypass, not the mechanism
 
-There's no plan-approval UI yet — the API's approval endpoints are increment 15, and there's no
-VS Code extension yet either. `WorkerDependencies.autoApprovePlans` (on by default) has the worker
-approve every plan itself immediately after `PlannerRunner` produces one, purely so the
-Jira → implementation → PR pipeline can be exercised end-to-end today. The state machine still
-records a real `AWAITING_APPROVAL -> IMPLEMENTING` transition (with `autoApproved: true` in the
-event payload) — only the _decision_ is automated, not the bookkeeping. Flip the flag off once a
-real approval endpoint exists; nothing else about the pipeline needs to change.
+Reaching `AWAITING_APPROVAL` always creates a real, pending `plan_approval` row (`ApprovalRepository`,
+`@maddox-bot/database`) — that part isn't conditional on any flag. What _is_ conditional is whether
+`runTask()` waits for a human to decide it via `apps/api`'s `POST /approvals/:id/decide`, or
+proceeds immediately: `WorkerDependencies.autoApprovePlans` (on by default) skips waiting, useful
+for exercising the Jira → implementation → PR pipeline without a human in the loop (e.g. local
+development). A denied `plan_approval` transitions the task straight to `CANCELLED` — `runTask()`
+checks the approval's actual `status` (not just "did something approve it"), so an explicit denial
+and "still pending" are handled differently, not conflated into one "not approved yet" branch. Flip
+`autoApprovePlans` off in a real deployment once a human is actually expected to review plans;
+nothing else about the pipeline needs to change.
 
-For the same reason, any tool that unexpectedly needs approval mid-run gets `denyWithoutHuman()`
-— a safe-by-default deny, logged loudly, since there is no human to actually ask yet. Every tool
-wired into either role's registry today is safe-tier, so this should never actually fire in
-practice.
+Tool-level approval isn't real yet, unlike plan approval: any tool that unexpectedly needs approval
+mid-run gets `denyWithoutHuman()` — a safe-by-default deny, logged loudly, since there is no
+`tool_approval` row ever created and no human to actually ask. Every tool wired into either role's
+registry today is safe-tier, so this should never actually fire in practice.
 
 ## What's deliberately not here yet
 

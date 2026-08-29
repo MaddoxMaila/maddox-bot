@@ -1,5 +1,5 @@
 import { Database } from "@maddox-bot/database";
-import type { AgentTriggerJobPayload } from "@maddox-bot/events";
+import type { AgentTriggerJobPayload, TaskResumeJobPayload } from "@maddox-bot/events";
 import { createGitHubClient } from "@maddox-bot/github";
 import { createJiraClient } from "@maddox-bot/jira";
 import { createAnthropicProvider, ModelRouter } from "@maddox-bot/llm";
@@ -7,19 +7,19 @@ import { BullMqJobQueue } from "@maddox-bot/queue";
 import { createLogger, requireEnv } from "@maddox-bot/shared";
 import { handleAgentTriggerJob } from "./jobHandler.js";
 import { recoverStuckTasksOnStartup } from "./startupRecovery.js";
+import { runTask } from "./taskRunner.js";
 import type { WorkerDependencies } from "./workerDependencies.js";
 
 const logger = createLogger("worker");
 
 async function main(): Promise<void> {
   const githubToken = requireEnv("GITHUB_TOKEN");
+  const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6380";
 
   const deps: WorkerDependencies = {
     database: new Database(),
     // Same queue name as apps/api's producer — BullMQ queues are identified by name in Redis.
-    agentTriggerQueue: new BullMqJobQueue<AgentTriggerJobPayload>("agent-triggers", {
-      redisUrl: process.env.REDIS_URL ?? "redis://localhost:6380",
-    }),
+    agentTriggerQueue: new BullMqJobQueue<AgentTriggerJobPayload>("agent-triggers", { redisUrl }),
     llm: createAnthropicProvider(requireEnv("ANTHROPIC_API_KEY")),
     modelRouter: new ModelRouter(),
     githubToken,
@@ -48,7 +48,18 @@ async function main(): Promise<void> {
     { concurrency },
   );
 
-  logger.info({ concurrency }, "worker started, processing the agent-triggers queue");
+  // Separate from agentTriggerQueue: only apps/api's approval endpoint ever enqueues onto this
+  // one, as a nudge to re-check a task after a human decides an approval — never read elsewhere in
+  // this package, so it isn't part of WorkerDependencies.
+  const taskResumeQueue = new BullMqJobQueue<TaskResumeJobPayload>("task-resume", { redisUrl });
+  taskResumeQueue.process(
+    async (payload) => {
+      await runTask(deps, payload.taskId);
+    },
+    { concurrency },
+  );
+
+  logger.info({ concurrency }, "worker started, processing agent-triggers and task-resume queues");
 }
 
 try {
